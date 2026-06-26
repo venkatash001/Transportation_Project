@@ -170,7 +170,8 @@ See `GCP_Auth_Setup.md` in project root for the full guide.
 |---|-------|--------|-------|
 | 1 | GCP credentials not configured | OPEN | Service account key or gcloud needed -- see GCP_Auth_Setup.md |
 | 2 | Corrections and enhancements pending | RESOLVED | Auth, Override Editor, Ad-Hoc Roster, SQL fix all implemented |
-| 3 | GitHub push not done yet | OPEN | Needs gcloud or PAT for git push |
+| 3 | GitHub push not done yet | RESOLVED | All 26 files pushed to venkatash001/Transportation_Project main branch (commit 34149c5) |
+| 8 | App only accessible on host machine | RESOLVED | HOST changed to 0.0.0.0 -- accessible on Walmart network via http://10.93.60.49:8501 |
 | 4 | SQL duration filter returned 0 rows | RESOLVED | Removed WHERE filter, moved deduplication to Python (keep longest duration per agent/date) |
 | 5 | SQLite missing shift_type column | RESOLVED | Added ALTER TABLE migration in init_db() -- auto-runs on startup |
 | 6 | BQ project ID warning | RESOLVED | Project passed explicitly to bigquery.Client(project=GCP_PROJECT) |
