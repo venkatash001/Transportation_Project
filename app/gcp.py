@@ -154,12 +154,14 @@ def fetch_from_gcp() -> list[dict]:
     job     = client.query(sql)
     results = job.result()
 
-    MIN_DURATION_MINUTES = 120
+    # No minimum duration filter — values in source may be in different units.
+    # We rely on max-duration deduplication per (agent, date) to pick the Open shift.
+    MIN_DURATION_MINUTES = 0
 
-    # ── Collect every qualifying raw row ────────────────────────────────────
-    # Each entry: (vcc, sched_date, duration_min, start_ist, end_ist, raw_dict)
+    # ── Collect every qualifying raw row ──────────────────────────────────────
     qualifying: list[tuple] = []
-    vcc_raw: dict[str, list[dict]] = {}      # all raw rows grouped by vcc_id
+    vcc_raw: dict[str, list[dict]] = {}
+    _debug_sample: list = []   # first 5 rows for duration diagnostics
 
     for r in results:
         raw = dict(r)
@@ -170,6 +172,10 @@ def fetch_from_gcp() -> list[dict]:
 
         # Always collect for metadata pass (even short rows have manager data)
         vcc_raw.setdefault(vcc, []).append(raw)
+
+        # Debug sample: capture first 5 rows to log actual duration values
+        if len(_debug_sample) < 5:
+            _debug_sample.append((vcc, dur, raw.get("SCHED_ACTV_DUR_MIN_QTY")))
 
         if dur < MIN_DURATION_MINUTES:
             continue   # exclude from schedule pass only
@@ -182,6 +188,9 @@ def fetch_from_gcp() -> list[dict]:
 
         qualifying.append((vcc, sched_date, dur, start_ist, end_ist, raw))
 
+    # Log duration samples so we can see what values are actually coming back
+    logger.info("Duration samples (first 5 rows): %s",
+                [(v, d, raw_d) for v, d, raw_d in _debug_sample])
     logger.info("BQ returned %d total rows; %d qualify (dur >= %d min) across %d agents",
                 sum(len(v) for v in vcc_raw.values()),
                 len(qualifying), MIN_DURATION_MINUTES, len(vcc_raw))

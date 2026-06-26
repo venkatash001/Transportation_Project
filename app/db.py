@@ -93,20 +93,20 @@ def upsert_roster(rows: list[dict]) -> int:
              :team_name, :role, :bus_line, :l1_manager, :l2_manager,
              :schedule_date, :start_ist, :end_ist, :shift_label, :shift_type)
         ON CONFLICT(vcc_id, schedule_date) DO UPDATE SET
-            win_id        = excluded.win_id,
-            login_id      = excluded.login_id,
-            first_name    = excluded.first_name,
-            last_name     = excluded.last_name,
-            full_name     = excluded.full_name,
-            team_name     = excluded.team_name,
-            role          = excluded.role,
-            bus_line      = excluded.bus_line,
-            l1_manager    = excluded.l1_manager,
-            l2_manager    = excluded.l2_manager,
-            start_ist     = excluded.start_ist,
-            end_ist       = excluded.end_ist,
-            shift_label   = excluded.shift_label,
-            shift_type    = excluded.shift_type
+            login_id   = CASE WHEN excluded.login_id   != '' THEN excluded.login_id   ELSE roster.login_id   END,
+            win_id     = CASE WHEN excluded.win_id     != '' THEN excluded.win_id     ELSE roster.win_id     END,
+            first_name = CASE WHEN excluded.first_name != '' THEN excluded.first_name ELSE roster.first_name END,
+            last_name  = CASE WHEN excluded.last_name  != '' THEN excluded.last_name  ELSE roster.last_name  END,
+            full_name  = CASE WHEN excluded.full_name  != '' THEN excluded.full_name  ELSE roster.full_name  END,
+            team_name  = CASE WHEN excluded.team_name  != '' THEN excluded.team_name  ELSE roster.team_name  END,
+            role       = CASE WHEN excluded.role       != '' THEN excluded.role       ELSE roster.role       END,
+            bus_line   = CASE WHEN excluded.bus_line   != '' THEN excluded.bus_line   ELSE roster.bus_line   END,
+            l1_manager = CASE WHEN excluded.l1_manager != '' THEN excluded.l1_manager ELSE roster.l1_manager END,
+            l2_manager = CASE WHEN excluded.l2_manager != '' THEN excluded.l2_manager ELSE roster.l2_manager END,
+            start_ist    = excluded.start_ist,
+            end_ist      = excluded.end_ist,
+            shift_label  = excluded.shift_label,
+            shift_type   = excluded.shift_type
     """
     with _connect() as conn:
         conn.executemany(sql, rows)

@@ -6,16 +6,15 @@
 WITH AGNT_BEST AS (
     -- For each VCC_AGNT_ID, keep exactly ONE row.
     -- Priority: rows where LVL1_MGR_LOGIN_NM is populated first,
-    --           then rows where WIN_NBR is populated.
-    -- This ensures a0s1tiz-style agents always resolve to their real manager row.
+    --           then rows where WIN_NBR is populated (WIN_NBR is INT64 - no TRIM).
     SELECT *,
         ROW_NUMBER() OVER (
             PARTITION BY VCC_AGNT_ID
             ORDER BY
                 CASE WHEN LVL1_MGR_LOGIN_NM IS NOT NULL
-                          AND TRIM(LVL1_MGR_LOGIN_NM) != '' THEN 0 ELSE 1 END,
+                          AND LVL1_MGR_LOGIN_NM != ''   THEN 0 ELSE 1 END,
                 CASE WHEN WIN_NBR IS NOT NULL
-                          AND TRIM(WIN_NBR) != ''           THEN 0 ELSE 1 END
+                          AND WIN_NBR > 0               THEN 0 ELSE 1 END
         ) AS _rn
     FROM `wmt-cc-datasphere-prod.WFM_ADHOC.CS_AGNT`
 )
