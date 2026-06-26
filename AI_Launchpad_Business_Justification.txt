@@ -1,0 +1,178 @@
+================================================================================
+  CES IND TRANSPORTATION ROSTER - AI LAUNCHPAD BUSINESS JUSTIFICATION
+================================================================================
+  App Name     : CES IND Transportation Roster
+  Business Unit: CareOps, Centralized Reporting, India
+  GitHub URL   : https://github.com/venkatash001/Transportation_Project
+  Owner        : v0m06tt (Venkat)
+  Date         : 26-Jun-2026
+================================================================================
+
+
+--------------------------------------------------------------------------------
+Q1. Does your app need a database or storage bucket?
+--------------------------------------------------------------------------------
+
+Yes.
+
+The application uses a local SQLite database as an intermediate cache between
+BigQuery and the UI. For Launchpad deployment, this needs to be replaced with
+either Cloud SQL (PostgreSQL) or a Cloud Storage bucket to persist data across
+container restarts.
+
+Database details:
+  - Schema   : 3 tables (roster, roster_overrides, refresh_log)
+  - Data size : Approximately 80,000 rows, less than 50 MB
+  - Access    : Read/write from the application only
+
+The app does NOT require any blob or media storage. All exports (CSV, Excel,
+PDF) are generated in memory and streamed directly to the user's browser.
+
+
+--------------------------------------------------------------------------------
+Q2. Does your app require Element LLM Gateway access?
+--------------------------------------------------------------------------------
+
+No.
+
+This application is a pure data visualization and roster management tool. It
+does not use any Large Language Models, generative AI, or AI inference of any
+kind. All logic is deterministic. Data is fetched from BigQuery, transformed
+into a schedule matrix, and rendered as HTML tables with export options.
+
+No LLM Gateway access is needed now or planned for future phases.
+
+
+--------------------------------------------------------------------------------
+Q3. External or internal API integrations needed?
+--------------------------------------------------------------------------------
+
+Yes. One internal GCP integration is required. No external APIs are used.
+
+  Integration  : Google BigQuery
+  Type         : Internal - Walmart GCP
+  GCP Project  : wmt-cc-datasphere-prod
+  Datasets     : CS_AGNT_SCHED, CS_AGNT
+  Access type  : Read-only SELECT query
+  Frequency    : Runs automatically every 2 hours via APScheduler
+  SDK used     : google-cloud-bigquery (Python)
+  IAM required : roles/bigquery.dataViewer on wmt-cc-datasphere-prod
+
+All traffic stays within the Walmart GCP environment. No external internet
+APIs are called at any point during application runtime.
+
+
+--------------------------------------------------------------------------------
+Q4. Any additional context or special requirements?
+--------------------------------------------------------------------------------
+
+TECH STACK
+  - Language    : Python 3.11+
+  - Framework   : FastAPI + HTMX + Tailwind CSS
+  - Database    : SQLite (to be replaced with Cloud SQL for production)
+  - Scheduler   : APScheduler (2-hour BigQuery auto-refresh)
+  - BQ SDK      : google-cloud-bigquery
+  - Exports     : openpyxl (Excel), fpdf2 (PDF), stdlib csv (CSV)
+
+GITHUB REPOSITORY
+  URL    : https://github.com/venkatash001/Transportation_Project
+  Branch : main
+  Commit : 699016d
+  Note   : Full FastAPI application with requirements.txt included.
+           Ready for containerisation. Dockerfile can be added on request.
+
+AUTHENTICATION MODEL
+  Two-tier access control:
+  - Viewer (default) : No login required. Can browse all 3 roster tabs and
+                       download CSV, Excel, and PDF exports.
+  - Admin            : Login required. Additional access to GCP refresh
+                       trigger, shift override editor, and ad-hoc roster
+                       generator tool.
+  Current implementation uses HMAC cookie-based sessions. Can be upgraded to
+  Walmart SSO or SAML if Launchpad supports it.
+
+DATA SENSITIVITY
+  Data includes shift times, associate names, WIN IDs, and Login IDs.
+  This is internal Walmart operational data (work schedules only).
+  No HIPAA data. No SSN. No financial data. No customer PII.
+
+PORT
+  Currently configured on port 8501.
+  Happy to adjust to whatever port Launchpad assigns.
+
+AUTO REFRESH
+  APScheduler runs a BigQuery pull every 2 hours automatically.
+  Manual refresh is available to Admin role only via the UI.
+
+TEAM
+  CES IND India, CareOps Centralized Reporting.
+  Primary owner: v0m06tt (Venkat).
+
+
+--------------------------------------------------------------------------------
+Q5. What is the expected benefit of this Application?
+--------------------------------------------------------------------------------
+
+PROBLEM BEING SOLVED
+
+The CES India transportation team currently manages agent shift schedules
+through manually updated Excel files shared over email and SharePoint. This
+creates a fragmented, error-prone process where outdated copies circulate,
+schedule changes are missed, and supervisors have no single source of truth
+for upcoming or historical rosters.
+
+DIRECT BENEFITS
+
+1. Single Source of Truth
+   All shift data is sourced directly from BigQuery on the wmt-cc-datasphere-prod
+   project. No more stale Excel files being shared manually across the team.
+
+2. Real-Time Visibility
+   The application auto-refreshes every 2 hours and provides a 30-day future
+   schedule view and a 90-day historical view, accessible to the full team
+   instantly from any browser on the Walmart network.
+
+3. Operational Efficiency
+   Supervisors and L1/L2 managers can view their team roster, export it in
+   CSV, Excel, or PDF format, and share it in seconds instead of manually
+   compiling reports each time.
+
+4. Admin Override Capability
+   Admin users can manually adjust shift assignments directly in the UI.
+   Overrides are highlighted visually with audit notes and timestamps,
+   and are visible immediately to all viewers.
+
+5. Ad-Hoc Roster Generation
+   Admin can select any group of associates, set a custom shift and date
+   range, choose week-off days, and instantly download a formatted roster
+   in Excel or PDF. This previously took hours of manual effort in Excel.
+
+6. Reduced Escalations
+   With schedule visibility available self-serve for 200+ associates,
+   transport coordination queries to the analytics team are expected to
+   reduce significantly after go-live.
+
+7. Auditability
+   Every override is logged with timestamp and modifier name. Every GCP
+   refresh is logged with record count and status. Full history is
+   available at all times within the application.
+
+ESTIMATED IMPACT
+
+  Associates covered  : ~200 CES IND associates across multiple LOBs
+                        (Fraud, Chargebacks, Corp Gift Card, Pick Up/OLG,
+                        Account Review, and others)
+
+  Supervisors impacted: ~8 to 10 L1 and L2 supervisors who currently spend
+                        30 to 60 minutes per week manually compiling and
+                        sharing rosters. This application eliminates that
+                        effort entirely.
+
+  BigQuery cost impact: Zero incremental cost. The query runs read-only on
+                        an existing dataset already licensed for reporting
+                        under wmt-cc-datasphere-prod.
+
+
+================================================================================
+  END OF DOCUMENT
+================================================================================
