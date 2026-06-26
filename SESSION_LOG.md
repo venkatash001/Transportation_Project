@@ -13,9 +13,9 @@
 | **GitHub**     | https://github.com/venkatash001/Transportation_Project |
 | **Started**    | 2026-06-26 |
 | **Agent**      | Kratos (code-puppy-4e37f8) |
-| **Server**     | http://127.0.0.1:8501 |
+| **Server**     | http://0.0.0.0:8501 (team access: http://10.93.60.49:8501) |
 | **Venv**       | `%LOCALAPPDATA%\transport_roster_venv` (Python 3.13.5) |
-| **Launcher**   | Double-click `Run Me.bat` |
+| **Launcher**   | Double-click `Run Me.bat` or desktop shortcut |
 
 ---
 
@@ -28,154 +28,207 @@
 | Database       | SQLite (local cache -- `data/roster.db`) |
 | Data Source    | Google BigQuery (`wmt-cc-datasphere-prod`) |
 | Exports        | openpyxl (Excel), fpdf2 (PDF), csv stdlib |
-| Auth           | Google Application Default Credentials or Service Account Key |
+| Auth           | HMAC cookie sessions (Viewer default / Admin login) |
 | Version Control| Git 2.45.2 + GitHub (venkatash001/Transportation_Project) |
+| Icon           | Pillow-generated branded .ico (7 sizes, 16px-256px) |
 
 ---
 
 ## Session History
 
-| # | Date | Summary | Agent |
-|---|------|---------|-------|
-| 1 | 2026-06-26 | Project kickoff. Verified SharePoint folder + GitHub access. Session log created. | Kratos |
-| 1b | 2026-06-26 | Git v2.45.2 installed and verified. GitHub remote confirmed (main branch, commit a20bd180). | Kratos |
-| 2 | 2026-06-26 | Full web application built (20 files). Server launched at port 8501. All imports verified OK. | Kratos |
-| 3 | 2026-06-26 | Fixed missing google-cloud-bigquery install. Fixed gcp.py bug (missing job line). Added GCP auth setup guide + in-app warning banner. Pending: corrections and enhancements from Venkat. | Kratos |
+| # | Date | Summary | Commit | Agent |
+|---|------|---------|--------|-------|
+| 1 | 2026-06-26 | Project kickoff. Verified SharePoint folder + GitHub access. Session log created. | -- | Kratos |
+| 2 | 2026-06-26 | Full web application built (20 files). Server launched at port 8501. All imports verified OK. 81,288 BQ records loaded. | 34149c5 | Kratos |
+| 3 | 2026-06-26 | Fixed gcp.py bug, added GCP auth guide, installed google-cloud-bigquery. | 34149c5 | Kratos |
+| 4 | 2026-06-26 | 4 enhancements: SQL Open-activity filter, Admin/Viewer auth, Override Editor, Ad-Hoc Roster generator. | 34149c5 | Kratos |
+| 5 | 2026-06-26 | Column mapping fix: LOGIN_ID as User ID, WIN_NBR as WIN ID, correct Full Name, L1/L2 Manager, Team. | 699016d | Kratos |
+| 6 | 2026-06-26 | Access setup: HOST changed to 0.0.0.0. All 26 files pushed to GitHub. Desktop shortcut + branded icon created. | 699016d | Kratos |
+| 7 | 2026-06-26 | AI Launchpad business justification written + saved as text file. | 0fdf993 | Kratos |
+| 8 | 2026-06-26 | WIN_NBR / L1_Manager gaps: two-pass BQ metadata strategy implemented in gcp.py. backfill_meta.py ran on 1033 agents. | 0fdf993 | Kratos |
+| 9 | 2026-06-26 | Root cause diagnosed: TRIM(INT64) SQL error + upsert overwriting good values. Fixed SQL CTE, fixed upsert CASE logic, manual_fix.py for known corrections. | 6656321 | Kratos |
+| 10 | 2026-06-26 | Next approach agreed: Excel master file upload via Admin UI to populate agent_master table. Deferred to Monday. All saved. | 85191f1+ | Kratos |
 
 ---
 
-## Session 1 - Repository Access Check
+## Features Implemented (Complete List)
 
-### SharePoint Folder
-- **Status:** Accessible -- folder existed, was empty on first check
-- **Synced via:** OneDrive for Business
-
-### GitHub Repository
-- **URL:** https://github.com/venkatash001/Transportation_Project
-- **Status:** Accessible (HTTP 200 confirmed). Has existing `main` branch (commit `a20bd180`).
-
-### Git Installation
-- **Status:** Installed (v2.45.2.windows.1)
-- **Path:** `C:\Users\V0M06TT\AppData\Local\Programs\Git\cmd\git.exe`
-- **Note:** Code Puppy shell sessions need PATH refresh -- use PowerShell with explicit PATH reload.
-
----
-
-## Session 2 - Full Application Build
-
-### Core Concept
-Matrix-style web view of associate shift schedules pulled from GCP BigQuery.
-- Rows: User ID (VCC ID) | WIN ID | Full Name
-- Columns: One per date, showing shift start-end in IST (e.g. "07:00 AM - 04:00 PM") or "OFF"
-- Data source: `agent_schedule_query.sql` against `wmt-cc-datasphere-prod`
-
-### Excel Template Reference
-`Sample Roster.xlsx` -- Sheet: Chargeback (68 rows x 37 cols)
-- Row 1: Day names (Thu, Fri, Sat...)
-- Row 2: Headers (S.No, User ID, Win Nbr, First Name, Last Name, Name, Role, LOB, L1 Sup, L2 Sup) + date columns
-- Data cells: "07:00 AM - 04:00 PM" for scheduled, "OFF" for day off
-
-### File Inventory
-
-| File | Size | Purpose |
-|------|------|---------|
-| `Run Me.bat` | 2.1 KB | One-click runner -- venv setup, install, launch, open browser |
-| `requirements.txt` | 158 B | Python dependencies |
-| `.gitignore` | -- | Excludes venv, db, .env, __pycache__ |
-| `GCP_Auth_Setup.md` | -- | Step-by-step GCP credentials guide |
-| `SESSION_LOG.md` | this file | Session log |
-| `Sample Roster.xlsx` | 30.6 KB | Reference template (not committed to git) |
-| `query/agent_schedule_query.sql` | 4.8 KB | GCP BigQuery SQL (local copy) |
-| `app/main.py` | 3.5 KB | FastAPI entry + APScheduler 2h auto-refresh |
-| `app/config.py` | 1.1 KB | Paths, port 8501, 30-day future / 90-day historical windows |
-| `app/db.py` | 5.6 KB | SQLite CRUD -- init, upsert, query, refresh log |
-| `app/gcp.py` | 4.1 KB | BigQuery fetch, IST time formatting, date injection |
-| `app/matrix.py` | 3.2 KB | Flat rows -> matrix + daily summary builder |
-| `app/refresh.py` | 1.2 KB | GCP -> SQLite orchestrator (scheduler + manual trigger) |
-| `app/routes/roster.py` | 2.1 KB | /roster/future and /roster/historical endpoints |
-| `app/routes/summary.py` | 1.5 KB | /summary endpoint |
-| `app/routes/export.py` | 10.4 KB | /export/csv, /export/excel, /export/pdf endpoints |
-| `app/templates/index.html` | 9.1 KB | Main UI: header, tabs, team filter, export buttons, GCP banner |
-| `app/templates/partials/roster_table.html` | 4.8 KB | Matrix table (HTMX swap target) |
-| `app/templates/partials/summary_table.html` | 5.3 KB | Daily summary table (HTMX swap target) |
-| `app/static/style.css` | 1.3 KB | Sticky columns, scrollbar, HTMX spinner |
-| `data/roster.db` | 32 KB | SQLite cache (auto-created, gitignored) |
-
-### Features Implemented
+### Core Roster View
 - [x] 3-tab UI: Future Schedule (next 30 days) / Historical (last 90 days) / Summary
-- [x] Matrix view: sticky identity cols (User ID, WIN, Name) + scrollable date cols
-- [x] Date cells: IST shift times in green or "OFF" in gray
+- [x] Matrix view: sticky identity columns (Login ID, WIN, Name) + scrollable date columns
+- [x] Date cells: IST shift times in green (Full day), blue (Half day), or OFF in gray
 - [x] Team filter dropdown (dynamic from DB)
-- [x] Client-side search (name / ID / WIN -- no server round-trip)
-- [x] Export: CSV, Excel (Walmart-styled, freeze panes, colour coded), PDF (landscape, paginated 14 cols/page)
-- [x] Manual "Refresh from GCP" button in header
+- [x] Client-side search by name / login ID / team
+- [x] Half-day shift badge `(H)` indicator
+- [x] Admin override cells highlighted amber with dot indicator
+
+### Exports
+- [x] CSV download (all data, current scope + team filter)
+- [x] Excel download (Walmart-styled, freeze panes, colour-coded, override cells amber)
+- [x] PDF download (landscape, paginated 14 columns per page)
+
+### Admin Features
+- [x] Admin login: `CESINDANALYST / Walmart@00100`
+- [x] Viewer role: default, no login required
+- [x] Override Editor (`/admin/overrides`): click any cell, pick from shift presets or custom time, add note
+- [x] Ad-Hoc Roster (`/admin/adhoc`): select associates, date range, shift, week-off days, preview, export
+- [x] Manual GCP Refresh button (Admin only)
+- [x] Logout endpoint
+
+### Data Pipeline
+- [x] BigQuery SQL with AGNT_BEST CTE (deduplicates CS_AGNT, L1_MGR-populated rows prioritised)
+- [x] Two-pass Python fetch: metadata from ALL rows per VCC_ID, schedule from longest-duration row per date
+- [x] SQLite upsert: CASE WHEN logic -- blank incoming value never overwrites existing good value
 - [x] APScheduler: auto-refresh every 2 hours
-- [x] Last sync timestamp in header
-- [x] Empty-state view with prompt to refresh
-- [x] GCP auth warning banner (shows when DB is empty)
-- [x] Walmart brand colours: Blue #0053E2, Spark Yellow #FFC220
-- [x] WCAG 2.2 AA contrast ratios
+- [x] Refresh log table (status, record count, timestamp per run)
+- [x] `manual_fix.py`: direct SQLite patch for known metadata corrections
+- [x] `backfill_meta.py`: scans existing DB rows to fill gaps from sibling rows
+
+### Infrastructure
+- [x] Desktop shortcut: `CES IND Transport Roster.lnk` on OneDrive Desktop
+- [x] Branded icon: `transport_roster.ico` (Walmart blue + yellow spark, 7 sizes)
+- [x] `create_icon.py`: regenerate icon anytime
+- [x] `Run Me.bat`: one-click start (venv, install, launch, browser open)
+- [x] HOST = 0.0.0.0: accessible from any machine on Walmart network at http://10.93.60.49:8501
+- [x] AI Launchpad business justification: `AI_Launchpad_Business_Justification.txt`
 
 ---
 
-## Session 3 - Bug Fixes and GCP Auth Setup
+## Current File Inventory
 
-### Bug Fixed: gcp.py missing job line
-During an inline edit, `job = client.query(sql)` was accidentally removed
-while `results = job.result()` was still present -- causing a NameError.
-Fixed and verified clean import.
-
-### Package Added: google-cloud-bigquery
-Was excluded from initial install. Added via uv pip install.
-Version: 3.42.1 (installed with all Google auth dependencies).
-
-### Package Added: google-auth-oauthlib
-Added for future OAuth browser-flow support.
-
-### GCP Auth -- Current Status
-- Google Cloud SDK (gcloud): NOT installed on this machine
-- Application Default Credentials file: NOT present
-- `gcp_service_account.json` in project root: NOT present yet
-- **Status: Blocked -- data cannot be fetched until one of the above is resolved**
-
-### GCP Auth -- Resolution Path (for Venkat)
-
-**Option A (recommended): Service Account Key**
-1. Go to: https://console.cloud.google.com/iam-admin/serviceaccounts?project=wmt-cc-datasphere-prod
-2. Pick a service account with BigQuery Data Viewer + Job User roles
-3. Keys tab -> Add Key -> JSON -> download
-4. Rename to `gcp_service_account.json` and drop in project root (next to Run Me.bat)
-5. Click "Refresh from GCP" -- done
-
-**Option B: gcloud CLI**
-1. Download from browser: https://cloud.google.com/sdk/docs/install-sdk#windows
-2. Install and run: `gcloud auth application-default login`
-3. Restart app and refresh
-
-See `GCP_Auth_Setup.md` in project root for the full guide.
-
-### Changes Made This Session
-- `app/gcp.py` -- fixed missing `job` line, added `import os`, added service account key auto-detect from project root
-- `app/refresh.py` -- added friendly error messages for auth failures, BQ permission errors etc.
-- `app/templates/index.html` -- added amber warning banner when DB is empty with step-by-step auth instructions
-- `GCP_Auth_Setup.md` -- created full setup guide
-- `Run Me.bat` -- fixed Python version pin (removed `--python 3.11`, uses system Python 3.13.5)
-- `requirements.txt` -- google-auth-oauthlib added
+```
+28.Transportation_Roster_Project/
+|-- Run Me.bat                          One-click launcher
+|-- SESSION_LOG.md                      This file
+|-- GCP_Auth_Setup.md                   GCP credentials guide
+|-- AI_Launchpad_Business_Justification.txt
+|-- requirements.txt                    Python dependencies
+|-- .gitignore
+|-- transport_roster.ico                Branded app icon (7 sizes)
+|-- create_icon.py                      Icon generator (Pillow)
+|-- backfill_meta.py                    Backfill WIN/L1 from sibling DB rows
+|-- manual_fix.py                       Direct SQLite patch for known corrections
+|-- verify_backfill.py                  Verify backfill results
+|-- debug_agent.py                      Debug specific agent in DB
+|-- find_row620.py                      Find agent at matrix row N
+|-- check_refresh_log.py               Check BQ refresh history
+|-- inspect_excels.py                   Inspect Excel file column structures
+|-- Sample Roster.xlsx                  Reference template (Excel format)
+|-- query/
+|   |-- agent_schedule_query.sql        BigQuery SQL (AGNT_BEST CTE)
+|-- app/
+|   |-- main.py                         FastAPI entry + APScheduler
+|   |-- config.py                       Paths, port, windows, credentials
+|   |-- db.py                           SQLite CRUD (init, upsert, query)
+|   |-- gcp.py                          BigQuery fetch + two-pass metadata
+|   |-- matrix.py                       Matrix + summary builder
+|   |-- refresh.py                      GCP->SQLite orchestrator
+|   |-- auth.py                         HMAC session auth
+|   |-- routes/
+|   |   |-- __init__.py
+|   |   |-- roster.py                   /roster/future, /roster/historical
+|   |   |-- summary.py                  /summary
+|   |   |-- export.py                   /export/csv, /export/excel, /export/pdf
+|   |   |-- admin.py                    /admin/overrides, /admin/adhoc
+|   |-- templates/
+|   |   |-- index.html                  Main UI
+|   |   |-- login.html                  Admin login page
+|   |   |-- partials/
+|   |   |   |-- roster_table.html       Matrix table partial
+|   |   |   |-- summary_table.html      Summary partial
+|   |   |-- admin/
+|   |       |-- overrides.html          Override Editor page
+|   |       |-- adhoc.html              Ad-Hoc Roster page
+|   |-- static/
+|       |-- style.css                   Sticky columns, scrollbar, HTMX spinner
+|-- data/
+    |-- roster.db                       SQLite cache (gitignored, auto-created)
+```
 
 ---
 
-## Open Items / Known Issues
+## Open Items / Next Steps (Monday)
 
-| # | Issue | Status | Notes |
-|---|-------|--------|-------|
-| 1 | GCP credentials not configured | OPEN | Service account key or gcloud needed -- see GCP_Auth_Setup.md |
-| 2 | Corrections and enhancements pending | RESOLVED | Auth, Override Editor, Ad-Hoc Roster, SQL fix all implemented |
-| 3 | GitHub push not done yet | RESOLVED | All 26 files pushed to venkatash001/Transportation_Project main branch (commit 34149c5) |
-| 8 | App only accessible on host machine | RESOLVED | HOST changed to 0.0.0.0 -- accessible on Walmart network via http://10.93.60.49:8501 |
-| 4 | SQL duration filter returned 0 rows | RESOLVED | Removed WHERE filter, moved deduplication to Python (keep longest duration per agent/date) |
-| 5 | SQLite missing shift_type column | RESOLVED | Added ALTER TABLE migration in init_db() -- auto-runs on startup |
-| 6 | BQ project ID warning | RESOLVED | Project passed explicitly to bigquery.Client(project=GCP_PROJECT) |
-| 7 | Override page 500 error | RESOLVED | Caused by missing shift_type column (item 5) -- fixed by migration |
+| # | Issue | Status | Plan |
+|---|-------|--------|------|
+| 1 | WIN_NBR / L1_Manager still blank for many agents | IN PROGRESS | Excel master file approach -- build Admin Upload UI to load an Excel with correct metadata into a new `agent_master` table. Excel data takes priority over BQ for all metadata fields. |
+| 2 | `SCHED_ACTV_DUR_MIN_QTY` is NULL in BQ source | KNOWN | Column is NULL in the table -- using max-duration deduplication still works correctly. No action needed. |
+| 3 | Manual fixes get wiped on BQ refresh | RESOLVED | Upsert now uses CASE WHEN -- blank incoming values never overwrite existing good values. |
+| 4 | More agents with incorrect Role and Team | NEXT | Will be fixed by the Excel master file approach (Item 1). |
+| 5 | AI Launchpad hosting | PLANNED | Use launchpad sub-agent to deploy. Dockerfile needed. Cloud SQL for DB. |
+| 6 | Excel master file upload UI | NEXT | Admin UI: upload Excel -> parse -> populate `agent_master` table -> overrides BQ metadata on render. |
+| 7 | GCP credentials (for production) | OPEN | Service account key OR gcloud ADC needed. See GCP_Auth_Setup.md. |
+
+---
+
+## BQ Refresh Diagnostics
+
+| Symptom | Root Cause | Fix Applied |
+|---------|-----------|-------------|
+| 0 rows returned | `TRIM(WIN_NBR)` on INT64 column crashed BQ | Changed to `WIN_NBR > 0` in CTE |
+| 0 rows qualified | `SCHED_ACTV_DUR_MIN_QTY` is NULL for all rows | Dropped MIN_DURATION_MINUTES filter to 0 |
+| Manual fix wiped on refresh | Upsert used `excluded.field` unconditionally | Changed to CASE WHEN -- blank never overwrites non-blank |
+| WIN/L1 blank even after two-pass | CS_AGNT has multiple rows per agent; NULL-WIN group had more BQ rows and "won" | AGNT_BEST CTE deduplicates CS_AGNT to 1 row per VCC_AGNT_ID before join |
+
+---
+
+## Known Correct Agent Data (manual_fix.py KNOWN_FIXES)
+
+| Login ID | WIN Number | L1 Manager | Notes |
+|----------|-----------|------------|-------|
+| a0s1tiz | 234049562 | MOHAMMED SHARIEF | Verified by Venkat 2026-06-26 |
+
+*Add more here as discovered. Run `manual_fix.py` to apply.*
+
+---
+
+## Column Mapping (BQ -> App)
+
+| App Column | BQ Field | Notes |
+|------------|----------|-------|
+| User ID (display) | `LOGIN_ID` from CS_AGNT | e.g. a0s1tiz |
+| WIN ID | `WIN_NBR` from CS_AGNT | INT64, e.g. 234049562 |
+| Full Name | `FIRST_NM + ' ' + LAST_NM` | Concat from CS_AGNT |
+| Team | `SITE_NM` from CS_AGNT_SCHED | |
+| Role | `AGNT_PROFL_NM` from CS_AGNT | |
+| L1 Manager | `LVL1_MGR_LOGIN_NM` from CS_AGNT | |
+| L2 Manager | `LVL2_MGR_LOGIN_NM` from CS_AGNT | |
+| Shift Label | `Schedule_StartTime_IST - Schedule_EndTime_IST` | Formatted to 12h IST |
+| Internal Key | `VCC_ID` (AGNT_ACCT_ID) | Used for DB uniqueness, not displayed |
+
+---
+
+## Admin Credentials
+
+| Role | Username | Password | Access |
+|------|----------|----------|--------|
+| Admin | CESINDANALYST | Walmart@00100 | Full: refresh, override, ad-hoc |
+| Viewer | (no login) | (no login) | View + download only |
+
+---
+
+## API Reference
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/` | Public | Main page |
+| GET | `/roster/future?team=` | Public | Future schedule matrix |
+| GET | `/roster/historical?team=` | Public | Historical matrix |
+| GET | `/summary?team=&scope=` | Public | Summary tab |
+| GET | `/export/csv?scope=&team=` | Public | Download CSV |
+| GET | `/export/excel?scope=&team=` | Public | Download Excel |
+| GET | `/export/pdf?scope=&team=` | Public | Download PDF |
+| GET | `/login` | Public | Admin login page |
+| POST | `/login` | Public | Login form submit |
+| GET | `/logout` | Public | Clear session |
+| POST | `/api/refresh` | Admin | Trigger BQ refresh |
+| GET | `/api/status` | Public | Last refresh status |
+| GET | `/admin/overrides?l1=` | Admin | Override Editor |
+| POST | `/api/admin/override` | Admin | Save override |
+| POST | `/api/admin/override/delete` | Admin | Remove override |
+| GET | `/admin/adhoc` | Admin | Ad-Hoc Roster page |
+| POST | `/admin/adhoc/preview` | Admin | Preview ad-hoc matrix |
+| GET | `/admin/adhoc/export` | Admin | Download ad-hoc roster |
 
 ---
 
@@ -185,29 +238,16 @@ See `GCP_Auth_Setup.md` in project root for the full guide.
 |------|----------|--------|
 | 2026-06-26 | All project files in SharePoint OneDrive folder | Central storage + team access |
 | 2026-06-26 | GitHub: venkatash001/Transportation_Project | Version control + rollback |
-| 2026-06-26 | Session Log in SharePoint root | Persistent across sessions |
 | 2026-06-26 | Tech stack: FastAPI + HTMX + Tailwind + SQLite | Default Walmart stack, no build step |
 | 2026-06-26 | Venv in %LOCALAPPDATA% not OneDrive | Avoids OneDrive sync + hardlink issues |
-| 2026-06-26 | SQLite as local cache | Fast reads, no external DB needed, BQ is source of truth |
-| 2026-06-26 | Service account key auto-detected from project root | Zero-config for future users |
+| 2026-06-26 | SQLite as local cache, BQ as source of truth | Fast reads, simple setup |
+| 2026-06-26 | HOST = 0.0.0.0 | Team access via IP on Walmart network |
+| 2026-06-26 | HMAC cookie auth (no SSO yet) | Simple, no external dependency; upgrade to SSO on Launchpad |
+| 2026-06-26 | Upsert CASE WHEN for metadata fields | Protects manually-corrected values from being wiped by blank BQ data |
+| 2026-06-26 | Excel master file approach for metadata | BQ CS_AGNT has data quality issues (multiple rows per agent, NULL fields); clean Excel is source of truth |
+| 2026-06-26 | Admin UI file upload (not hardcoded path) | Works both locally AND on Launchpad (no local path dependency) |
 
 ---
 
-## API Reference
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/` | Main page (index.html) |
-| GET | `/roster/future?team=` | Future schedule matrix partial |
-| GET | `/roster/historical?team=` | Historical matrix partial |
-| GET | `/summary?team=&scope=future|historical` | Summary partial |
-| GET | `/export/csv?scope=&team=` | Download CSV |
-| GET | `/export/excel?scope=&team=` | Download Excel |
-| GET | `/export/pdf?scope=&team=` | Download PDF |
-| POST | `/api/refresh` | Trigger manual GCP refresh |
-| GET | `/api/status` | Get last refresh status |
-
----
-
-*Last updated: 2026-06-26 | Session 3 end | Updated by: Kratos (code-puppy-4e37f8)*
-*Next session: Corrections and enhancements from Venkat*
+*Last updated: 2026-06-26 | Session 10 end | Updated by: Kratos (code-puppy-4e37f8)*
+*Next session: Monday -- Excel master file upload UI + agent_master table*
