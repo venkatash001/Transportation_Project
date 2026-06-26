@@ -1,8 +1,30 @@
+-- CES IND Transport Roster - Agent Schedule Query
+-- Fix: CTE deduplicates CS_AGNT first (one row per agent, best WIN/L1 row wins)
+-- before joining to CS_AGNT_SCHED, so GROUP BY never sees NULL vs non-NULL
+-- splits for the same agent.
+
+WITH AGNT_BEST AS (
+    -- For each VCC_AGNT_ID, keep exactly ONE row.
+    -- Priority: rows where LVL1_MGR_LOGIN_NM is populated first,
+    --           then rows where WIN_NBR is populated.
+    -- This ensures a0s1tiz-style agents always resolve to their real manager row.
+    SELECT *,
+        ROW_NUMBER() OVER (
+            PARTITION BY VCC_AGNT_ID
+            ORDER BY
+                CASE WHEN LVL1_MGR_LOGIN_NM IS NOT NULL
+                          AND TRIM(LVL1_MGR_LOGIN_NM) != '' THEN 0 ELSE 1 END,
+                CASE WHEN WIN_NBR IS NOT NULL
+                          AND TRIM(WIN_NBR) != ''           THEN 0 ELSE 1 END
+        ) AS _rn
+    FROM `wmt-cc-datasphere-prod.WFM_ADHOC.CS_AGNT`
+)
+
 SELECT
     S.SRC_APPLN_NM AS Source_Application_Name,
     S.AGNT_ACCT_ID AS VCC_ID,
 
-    -- Agent Details from CS_AGNT
+    -- Agent Details from CS_AGNT (deduplicated)
     A.LOGIN_ID,
     A.WIN_NBR,
     A.AGNT_PROFL_NM,
@@ -49,8 +71,9 @@ SELECT
 
 FROM `wmt-cc-datasphere-prod.ces_prod_public.CS_AGNT_SCHED` S
 
-LEFT OUTER JOIN `wmt-cc-datasphere-prod.WFM_ADHOC.CS_AGNT` A
+LEFT OUTER JOIN AGNT_BEST A
     ON S.AGNT_ACCT_ID = A.VCC_AGNT_ID
+    AND A._rn = 1   -- only the single best row per agent
 
 WHERE S.SCHED_ACTV_START_DT_UTC BETWEEN '2025-11-01' AND CURRENT_DATE()
   AND S.SITE_NM IN (
