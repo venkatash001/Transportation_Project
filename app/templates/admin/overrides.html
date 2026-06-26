@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Override Editor - CES IND Transport Roster</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <link rel="stylesheet" href="/static/style.css">
+  <script>tailwind.config={theme:{extend:{colors:{walmart:{blue:'#0053e2',yellow:'#ffc220'}}}}}</script>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans">
+
+<!-- Header -->
+<header class="bg-walmart-blue shadow-lg sticky top-0 z-50">
+  <div class="max-w-full px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="bg-walmart-yellow rounded px-2 py-1"><span class="text-walmart-blue font-black text-lg">W</span></div>
+      <div>
+        <h1 class="text-white font-bold text-lg">Transport Roster &rsaquo; Override Editor</h1>
+        <p class="text-blue-200 text-xs">Admin: Manually adjust shift assignments</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <span class="bg-amber-400 text-amber-900 text-xs font-bold px-3 py-1 rounded-full">ADMIN MODE</span>
+      <a href="/admin/adhoc" class="text-sm text-blue-200 hover:text-white transition-colors">Ad-Hoc Roster</a>
+      <a href="/" class="text-sm text-blue-200 hover:text-white transition-colors">Main Roster</a>
+      <a href="/logout" class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg font-semibold transition-colors">Logout</a>
+    </div>
+  </div>
+</header>
+
+<div class="flex gap-0 h-[calc(100vh-65px)]">
+
+  <!-- LEFT SIDEBAR -->
+  <aside class="w-72 bg-white border-r border-gray-200 flex flex-col overflow-y-auto">
+    <div class="p-4 border-b border-gray-100">
+      <h2 class="text-sm font-bold text-gray-700 mb-3">Filter by L1 Supervisor</h2>
+      <form method="get" action="/admin/overrides">
+        <select name="l1" onchange="this.form.submit()"
+          class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-walmart-blue">
+          <option value="">-- Select Supervisor --</option>
+          {% for mgr in managers %}
+          <option value="{{ mgr }}" {% if mgr == selected_l1 %}selected{% endif %}>{{ mgr }}</option>
+          {% endfor %}
+        </select>
+      </form>
+    </div>
+
+    {% if agents %}
+    <div class="p-4">
+      <p class="text-xs font-semibold text-gray-500 mb-2">{{ agents|length }} associates under {{ selected_l1 }}</p>
+      <ul class="space-y-1">
+        {% for a in agents %}
+        <li class="text-xs p-2 rounded-lg hover:bg-blue-50 cursor-pointer"
+            onclick="selectAgent('{{ a.vcc_id }}','{{ a.full_name }}')">
+          <p class="font-semibold text-gray-800">{{ a.full_name }}</p>
+          <p class="text-gray-400">{{ a.login_id }} &middot; {{ a.team_name }}</p>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% else %}
+    <div class="p-4 text-xs text-gray-400">Select a supervisor to view associates.</div>
+    {% endif %}
+
+    <!-- Colour legend -->
+    <div class="mt-auto p-4 border-t border-gray-100">
+      <p class="text-xs font-semibold text-gray-500 mb-2">Cell Colours</p>
+      <div class="space-y-1 text-xs">
+        <div class="flex items-center gap-2"><span class="w-4 h-4 rounded bg-green-100 border border-green-300"></span>Scheduled (GCP)</div>
+        <div class="flex items-center gap-2"><span class="w-4 h-4 rounded bg-amber-100 border border-amber-300"></span>Admin Override</div>
+        <div class="flex items-center gap-2"><span class="w-4 h-4 rounded bg-blue-100 border border-blue-300"></span>Half Day</div>
+        <div class="flex items-center gap-2"><span class="w-4 h-4 rounded bg-gray-100 border border-gray-300"></span>Week Off / OFF</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="flex-1 overflow-auto p-4">
+
+    <div id="toast" class="hidden fixed top-4 right-4 z-50 bg-green-600 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-lg"></div>
+
+    {% if matrix_agents %}
+    <div class="mb-3 flex items-center justify-between">
+      <h2 class="text-sm font-bold text-gray-700">
+        Schedule: Next 14 Days &mdash; {{ matrix_agents|length }} Associates
+      </h2>
+      <p class="text-xs text-gray-400">Click any cell to override the shift</p>
+    </div>
+
+    <div class="overflow-x-auto rounded-xl shadow-sm border border-gray-200 bg-white">
+      <table class="roster-table border-collapse text-xs min-w-max w-full">
+        <thead>
+          <tr class="bg-walmart-yellow">
+            <th colspan="3" class="bg-walmart-blue text-white text-left px-3 py-2 font-bold sticky-block-sm">Associate</th>
+            {% for d in dates %}
+            <th class="text-center px-1 py-1.5 font-bold text-gray-800 border border-yellow-300 min-w-[130px]">
+              {{ d.strftime('%a') }}
+            </th>
+            {% endfor %}
+          </tr>
+          <tr class="bg-walmart-blue text-white text-xs">
+            <th class="sticky-col-1 bg-walmart-blue px-2 py-2 border border-blue-500 text-left min-w-[100px]">User ID</th>
+            <th class="sticky-col-3 bg-walmart-blue px-2 py-2 border border-blue-500 text-left min-w-[160px]">Full Name</th>
+            <th class="bg-walmart-blue px-2 py-2 border border-blue-500 text-left min-w-[100px] border-r-2 border-blue-300">Team</th>
+            {% for d in dates %}
+            <th class="text-center px-1 py-2 border border-blue-500 font-semibold min-w-[130px]">
+              {{ d.strftime('%d %b') }}
+            </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for agent in matrix_agents %}
+          <tr class="hover:bg-blue-50 transition-colors">
+            <td class="sticky-col-1 bg-white px-2 py-1.5 border border-gray-200 font-mono font-semibold text-blue-700">{{ agent.login_id }}</td>
+            <td class="sticky-col-3 bg-white px-2 py-1.5 border border-gray-200 font-semibold text-gray-800">{{ agent.full_name }}</td>
+            <td class="bg-white px-2 py-1.5 border border-gray-200 text-gray-600 border-r-2 border-gray-300">{{ agent.team_name }}</td>
+            {% for d in dates %}
+            {% set cell = agent.schedule.get(d.isoformat(), {"label":"OFF","is_override":false}) %}
+            {% set label = cell.label if cell is mapping else cell %}
+            {% set is_ovr = cell.is_override if cell is mapping else false %}
+            {% if is_ovr %}
+            <td class="text-center px-1 py-1.5 border border-amber-200 bg-amber-50 text-amber-800 font-semibold cursor-pointer hover:bg-amber-100 transition-colors"
+                onclick="openModal('{{ agent.vcc_id }}','{{ agent.full_name }}','{{ d.isoformat() }}','{{ label }}')">
+              {{ label }}<span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 ml-0.5 align-middle"></span>
+            </td>
+            {% elif label == 'OFF' %}
+            <td class="text-center px-1 py-1.5 border border-gray-100 bg-gray-50 text-gray-400 cursor-pointer hover:bg-yellow-50 transition-colors"
+                onclick="openModal('{{ agent.vcc_id }}','{{ agent.full_name }}','{{ d.isoformat() }}','{{ label }}')">
+              OFF
+            </td>
+            {% else %}
+            <td class="text-center px-1 py-1.5 border border-green-100 bg-green-50 text-green-800 font-semibold cursor-pointer hover:bg-yellow-50 transition-colors"
+                onclick="openModal('{{ agent.vcc_id }}','{{ agent.full_name }}','{{ d.isoformat() }}','{{ label }}')">
+              {{ label }}
+            </td>
+            {% endif %}
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="flex items-center justify-center h-64 text-gray-400 text-sm">
+      Select a supervisor from the left panel to load their associates.
+    </div>
+    {% endif %}
+  </main>
+</div>
+
+<!-- EDIT MODAL -->
+<div id="edit-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+    <h3 class="text-base font-bold text-gray-800 mb-1">Edit Shift</h3>
+    <p id="modal-subtitle" class="text-xs text-gray-500 mb-4"></p>
+    <form id="override-form" class="space-y-4">
+      <input type="hidden" id="ov-vcc" name="vcc_id">
+      <input type="hidden" id="ov-name" name="full_name">
+      <input type="hidden" id="ov-date" name="schedule_date">
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Shift</label>
+        <select id="ov-preset" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-walmart-blue" onchange="syncCustom(this.value)">
+          {% for p in presets %}
+          <option value="{{ p }}">{{ p }}</option>
+          {% endfor %}
+          <option value="__custom__">-- Custom time --</option>
+        </select>
+      </div>
+      <div id="custom-row" class="hidden grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Start (IST)</label>
+          <input type="time" id="ov-start" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-walmart-blue">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">End (IST)</label>
+          <input type="time" id="ov-end" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-walmart-blue">
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Note (optional)</label>
+        <input type="text" id="ov-note" name="note" placeholder="e.g. Training day, swap with..."
+          class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-walmart-blue">
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button type="button" onclick="saveOverride()"
+          class="flex-1 bg-walmart-blue text-white font-bold py-2.5 rounded-lg text-sm hover:bg-blue-700 transition-colors">
+          Save Override
+        </button>
+        <button type="button" onclick="removeOverride()"
+          class="flex-1 bg-gray-100 text-gray-700 font-bold py-2.5 rounded-lg text-sm hover:bg-gray-200 transition-colors border border-gray-300">
+          Clear Override
+        </button>
+        <button type="button" onclick="closeModal()"
+          class="px-4 text-gray-400 hover:text-gray-600 text-sm">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openModal(vcc, name, date, currentLabel) {
+  document.getElementById('ov-vcc').value   = vcc;
+  document.getElementById('ov-name').value  = name;
+  document.getElementById('ov-date').value  = date;
+  document.getElementById('ov-note').value  = '';
+  document.getElementById('modal-subtitle').textContent = name + ' - ' + date;
+  // Pre-select current label in dropdown if it matches a preset
+  const sel = document.getElementById('ov-preset');
+  let found = false;
+  for (let opt of sel.options) { if (opt.value === currentLabel) { sel.value = currentLabel; found = true; break; } }
+  if (!found) sel.value = sel.options[0].value;
+  document.getElementById('edit-modal').classList.remove('hidden');
+}
+function closeModal() { document.getElementById('edit-modal').classList.add('hidden'); }
+function syncCustom(val) {
+  document.getElementById('custom-row').classList.toggle('hidden', val !== '__custom__');
+}
+function _buildLabel() {
+  const sel = document.getElementById('ov-preset').value;
+  if (sel !== '__custom__') return sel;
+  const s = document.getElementById('ov-start').value;
+  const e = document.getElementById('ov-end').value;
+  if (!s || !e) { alert('Please set start and end time.'); return null; }
+  const fmt = t => { const [h,m]=t.split(':'); const H=+h; return `${(H%12||12).toString().padStart(2,'0')}:${m} ${H<12?'AM':'PM'}`; };
+  return fmt(s) + ' - ' + fmt(e);
+}
+function showToast(msg, ok=true) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `fixed top-4 right-4 z-50 text-sm font-semibold px-5 py-3 rounded-xl shadow-lg ${ok?'bg-green-600':'bg-red-600'} text-white`;
+  t.classList.remove('hidden');
+  setTimeout(()=>t.classList.add('hidden'), 3000);
+}
+async function saveOverride() {
+  const label = _buildLabel(); if (!label) return;
+  const fd = new FormData();
+  fd.append('vcc_id',        document.getElementById('ov-vcc').value);
+  fd.append('full_name',     document.getElementById('ov-name').value);
+  fd.append('schedule_date', document.getElementById('ov-date').value);
+  fd.append('shift_label',   label);
+  fd.append('note',          document.getElementById('ov-note').value);
+  const r = await fetch('/api/admin/override', {method:'POST', body:fd});
+  const j = await r.json();
+  showToast(j.success ? 'Override saved!' : j.message, j.success);
+  if (j.success) { closeModal(); setTimeout(()=>location.reload(), 800); }
+}
+async function removeOverride() {
+  const fd = new FormData();
+  fd.append('vcc_id',        document.getElementById('ov-vcc').value);
+  fd.append('schedule_date', document.getElementById('ov-date').value);
+  const r = await fetch('/api/admin/override/delete', {method:'POST', body:fd});
+  const j = await r.json();
+  showToast(j.success ? 'Override cleared!' : 'Error', j.success);
+  if (j.success) { closeModal(); setTimeout(()=>location.reload(), 800); }
+}
+</script>
+</body>
+</html>

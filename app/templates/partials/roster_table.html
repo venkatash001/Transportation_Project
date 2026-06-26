@@ -1,0 +1,97 @@
+{% if agents %}
+<div class="overflow-x-auto rounded-xl shadow-sm border border-gray-200 bg-white">
+  <table class="roster-table border-collapse text-xs min-w-max w-full">
+    <thead>
+      <tr class="bg-walmart-yellow">
+        <th colspan="7" class="sticky-block bg-walmart-blue text-white text-left px-3 py-2 font-bold text-xs border-r-2 border-blue-400">
+          {{ agents|length }} Associates &middot; {{ dates|length }} Days
+          {% if tab == 'adhoc' %}<span class="ml-3 text-yellow-300 font-normal">(Ad-Hoc Preview)</span>{% endif %}
+        </th>
+        {% for d in dates %}
+        <th class="text-center px-1 py-1.5 font-bold text-gray-800 border border-yellow-300 whitespace-nowrap min-w-[130px]">
+          {{ d.strftime('%a') }}
+        </th>
+        {% endfor %}
+      </tr>
+      <tr class="bg-walmart-blue text-white">
+        <th class="sticky-col-1 bg-walmart-blue text-center px-2 py-2 border border-blue-500">#</th>
+        <th class="sticky-col-2 bg-walmart-blue text-left px-2 py-2 border border-blue-500 whitespace-nowrap">User ID</th>
+        <th class="sticky-col-3 bg-walmart-blue text-left px-2 py-2 border border-blue-500 whitespace-nowrap">WIN ID</th>
+        <th class="sticky-col-4 bg-walmart-blue text-left px-2 py-2 border border-blue-500 min-w-[160px]">Full Name</th>
+        <th class="bg-walmart-blue text-left px-2 py-2 border border-blue-500 min-w-[160px]">Team</th>
+        <th class="bg-walmart-blue text-left px-2 py-2 border border-blue-500 whitespace-nowrap">Role</th>
+        <th class="bg-walmart-blue text-left px-2 py-2 border border-blue-500 min-w-[140px] border-r-2 border-blue-400">L1 Manager</th>
+        {% for d in dates %}
+        <th class="text-center px-1 py-2 border border-blue-500 whitespace-nowrap font-semibold min-w-[130px]">
+          {{ d.strftime('%d %b') }}
+        </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for agent in agents %}
+      <tr class="roster-row hover:bg-blue-50 transition-colors"
+          data-search="{{ agent.login_id|lower }} {{ agent.win_id|lower }} {{ agent.full_name|lower }} {{ agent.team_name|lower }}">
+        <td class="sticky-col-1 bg-white text-center px-2 py-1.5 border border-gray-200 text-gray-500 font-medium">{{ loop.index }}</td>
+        <td class="sticky-col-2 bg-white px-2 py-1.5 border border-gray-200 font-mono font-semibold text-blue-700 whitespace-nowrap">{{ agent.login_id }}</td>
+        <td class="sticky-col-3 bg-white px-2 py-1.5 border border-gray-200 font-mono text-gray-700 whitespace-nowrap">{{ agent.win_id }}</td>
+        <td class="sticky-col-4 bg-white px-2 py-1.5 border border-gray-200 font-semibold text-gray-800 whitespace-nowrap border-r-2 border-gray-300">{{ agent.full_name }}</td>
+        <td class="px-2 py-1.5 border border-gray-200 text-gray-600 whitespace-nowrap">{{ agent.team_name }}</td>
+        <td class="px-2 py-1.5 border border-gray-200 text-gray-600 whitespace-nowrap">{{ agent.role }}</td>
+        <td class="px-2 py-1.5 border border-gray-200 text-gray-600 whitespace-nowrap border-r-2 border-gray-300">{{ agent.l1_manager }}</td>
+
+        {% for d in dates %}
+        {% set cell = agent.schedule.get(d.isoformat(), {"label":"OFF","is_override":false,"shift_type":"OFF","note":""}) %}
+        {% set label = cell.label if cell is mapping else cell %}
+        {% set is_ovr = cell.is_override if cell is mapping else false %}
+        {% set tip = cell.note if cell is mapping else "" %}
+        {% set stype = cell.shift_type if cell is mapping else "FULL" %}
+
+        {% if label == 'OFF' %}
+        <td class="text-center px-1 py-1.5 border border-gray-100 bg-gray-50 text-gray-400 font-medium whitespace-nowrap">
+          OFF
+        </td>
+        {% elif is_ovr %}
+        <td class="text-center px-1 py-1.5 border border-amber-200 bg-amber-50 text-amber-800 font-semibold whitespace-nowrap shift-cell override-cell"
+            title="{{ tip }}">
+          {{ label }}
+          <span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 ml-0.5 align-middle"></span>
+        </td>
+        {% elif stype == 'HALF' %}
+        <td class="text-center px-1 py-1.5 border border-blue-100 bg-blue-50 text-blue-800 font-semibold whitespace-nowrap shift-cell">
+          {{ label }}
+          <span class="text-xs text-blue-400 ml-0.5">(H)</span>
+        </td>
+        {% else %}
+        <td class="text-center px-1 py-1.5 border border-green-100 bg-green-50 text-green-800 font-semibold whitespace-nowrap shift-cell">
+          {{ label }}
+        </td>
+        {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Legend -->
+<div class="flex flex-wrap gap-3 mt-2 text-xs text-gray-500 items-center">
+  <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-green-100 border border-green-300 inline-block"></span>Scheduled</span>
+  <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-blue-100 border border-blue-300 inline-block"></span>Half Day</span>
+  <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-amber-100 border border-amber-300 inline-block"></span>Admin Override</span>
+  <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-gray-100 border border-gray-300 inline-block"></span>Week Off</span>
+  <span class="ml-auto">All times in IST &middot; Auto-refreshes every 2 hours</span>
+</div>
+
+{% else %}
+<div class="flex flex-col items-center justify-center py-24 text-center">
+  <div class="bg-blue-50 rounded-full p-6 mb-4">
+    <svg class="w-14 h-14 text-walmart-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+        d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z"/>
+    </svg>
+  </div>
+  <h3 class="text-lg font-bold text-gray-700 mb-1">No Schedule Data</h3>
+  <p class="text-sm text-gray-500 max-w-md">{{ empty_message }}</p>
+</div>
+{% endif %}

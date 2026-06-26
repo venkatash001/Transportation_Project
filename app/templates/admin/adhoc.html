@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ad-Hoc Roster - CES IND Transport Roster</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <link rel="stylesheet" href="/static/style.css">
+  <script>tailwind.config={theme:{extend:{colors:{walmart:{blue:'#0053e2',yellow:'#ffc220'}}}}}</script>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans">
+
+<!-- Header -->
+<header class="bg-walmart-blue shadow-lg sticky top-0 z-50">
+  <div class="max-w-full px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="bg-walmart-yellow rounded px-2 py-1"><span class="text-walmart-blue font-black text-lg">W</span></div>
+      <div>
+        <h1 class="text-white font-bold text-lg">Transport Roster &rsaquo; Ad-Hoc Roster Generator</h1>
+        <p class="text-blue-200 text-xs">Admin: Build and export a custom roster</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <span class="bg-amber-400 text-amber-900 text-xs font-bold px-3 py-1 rounded-full">ADMIN MODE</span>
+      <a href="/admin/overrides" class="text-sm text-blue-200 hover:text-white">Override Editor</a>
+      <a href="/" class="text-sm text-blue-200 hover:text-white">Main Roster</a>
+      <a href="/logout" class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg font-semibold">Logout</a>
+    </div>
+  </div>
+</header>
+
+<div class="max-w-full px-4 py-6 grid grid-cols-1 xl:grid-cols-[380px_1fr] gap-6">
+
+  <!-- LEFT: Config panel -->
+  <div class="space-y-4">
+
+    <!-- Step 1: Select Associates -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+      <h2 class="text-sm font-bold text-gray-700 mb-3">Step 1 &mdash; Select Associates</h2>
+
+      <label class="block text-xs font-semibold text-gray-500 mb-1">Filter by L1 Supervisor</label>
+      <select id="mgr-filter" onchange="filterAgents(this.value)"
+        class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 mb-3 focus:outline-none focus:ring-2 focus:ring-walmart-blue">
+        <option value="">-- All Supervisors --</option>
+        {% for m in managers %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+      </select>
+
+      <label class="block text-xs font-semibold text-gray-500 mb-1">Search Associate</label>
+      <input id="agent-search" type="text" placeholder="Type name or ID..."
+        oninput="searchAgents(this.value)"
+        class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 mb-3 focus:outline-none focus:ring-2 focus:ring-walmart-blue">
+
+      <div class="flex gap-2 mb-2">
+        <button type="button" onclick="selectAll(true)" class="text-xs text-blue-600 hover:underline">Select All</button>
+        <span class="text-gray-300">|</span>
+        <button type="button" onclick="selectAll(false)" class="text-xs text-gray-500 hover:underline">Clear</button>
+        <span id="sel-count" class="ml-auto text-xs text-gray-400">0 selected</span>
+      </div>
+
+      <div id="agent-list" class="max-h-64 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+        {% for a in agents %}
+        <label class="agent-item flex items-center gap-2 px-3 py-2 hover:bg-blue-50 cursor-pointer"
+               data-name="{{ a.full_name|lower }}" data-id="{{ a.login_id|lower }}"
+               data-mgr="{{ a.l1_manager|lower }}">
+          <input type="checkbox" name="vcc_ids" value="{{ a.vcc_id }}" class="agent-cb rounded"
+                 onchange="updateCount()">
+          <div>
+            <p class="text-xs font-semibold text-gray-800">{{ a.full_name }}</p>
+            <p class="text-xs text-gray-400">{{ a.login_id }} &middot; {{ a.team_name }}</p>
+          </div>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Step 2: Date Range -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+      <h2 class="text-sm font-bold text-gray-700 mb-3">Step 2 &mdash; Date Range</h2>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-500 mb-1">Start Date</label>
+          <input type="date" id="start-date" value="{{ today }}"
+            class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-walmart-blue">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-500 mb-1">End Date</label>
+          <input type="date" id="end-date"
+            class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-walmart-blue">
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: Shift + Week Off -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+      <h2 class="text-sm font-bold text-gray-700 mb-3">Step 3 &mdash; Shift &amp; Week Off</h2>
+      <label class="block text-xs font-semibold text-gray-500 mb-1">Shift</label>
+      <select id="shift-sel" onchange="syncShiftCustom(this.value)"
+        class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 mb-3 focus:outline-none focus:ring-2 focus:ring-walmart-blue">
+        {% for p in presets %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+        <option value="__custom__">-- Custom time --</option>
+      </select>
+      <div id="shift-custom" class="hidden grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-500 mb-1">Start (IST)</label>
+          <input type="time" id="cs-start" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-500 mb-1">End (IST)</label>
+          <input type="time" id="cs-end" class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2">
+        </div>
+      </div>
+      <label class="block text-xs font-semibold text-gray-500 mb-2">Week Off Days</label>
+      <div class="flex flex-wrap gap-2">
+        {% for day_num, day_name in [(0,'Mon'),(1,'Tue'),(2,'Wed'),(3,'Thu'),(4,'Fri'),(5,'Sat'),(6,'Sun')] %}
+        <label class="flex items-center gap-1 text-xs cursor-pointer">
+          <input type="checkbox" class="weekoff-cb" value="{{ day_num }}"
+                 {% if day_num in [5,6] %}checked{% endif %}>
+          <span class="{% if day_num in [5,6] %}text-red-500 font-semibold{% else %}text-gray-700{% endif %}">{{ day_name }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
+      <button type="button" onclick="generatePreview()"
+        class="w-full bg-walmart-blue text-white font-bold py-2.5 rounded-lg text-sm hover:bg-blue-700 transition-colors">
+        Generate Preview
+      </button>
+      <div class="grid grid-cols-3 gap-2">
+        <button onclick="exportRoster('csv')" type="button"
+          class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 rounded-lg border border-gray-300 transition-colors">
+          Export CSV
+        </button>
+        <button onclick="exportRoster('excel')" type="button"
+          class="text-xs bg-green-50 hover:bg-green-100 text-green-700 font-semibold py-2 rounded-lg border border-green-300 transition-colors">
+          Export Excel
+        </button>
+        <button onclick="exportRoster('pdf')" type="button"
+          class="text-xs bg-red-50 hover:bg-red-100 text-red-700 font-semibold py-2 rounded-lg border border-red-300 transition-colors">
+          Export PDF
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Preview -->
+  <div>
+    <div id="preview-area" class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 min-h-64 flex items-center justify-center">
+      <div class="text-center text-gray-400">
+        <div class="text-4xl mb-3">&#9998;</div>
+        <p class="text-sm font-medium">Configure and click <strong>Generate Preview</strong></p>
+        <p class="text-xs mt-1">The roster matrix will appear here</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function updateCount() {
+  const n = document.querySelectorAll('.agent-cb:checked').length;
+  document.getElementById('sel-count').textContent = n + ' selected';
+}
+function selectAll(v) {
+  document.querySelectorAll('.agent-item:not([style*="none"]) .agent-cb').forEach(cb => { cb.checked = v; });
+  updateCount();
+}
+function filterAgents(mgr) {
+  document.querySelectorAll('.agent-item').forEach(el => {
+    el.style.display = (!mgr || el.dataset.mgr === mgr.toLowerCase()) ? '' : 'none';
+  });
+}
+function searchAgents(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('.agent-item').forEach(el => {
+    el.style.display = (!q || el.dataset.name.includes(q) || el.dataset.id.includes(q)) ? '' : 'none';
+  });
+}
+function syncShiftCustom(v) {
+  document.getElementById('shift-custom').classList.toggle('hidden', v !== '__custom__');
+}
+function _getShiftLabel() {
+  const v = document.getElementById('shift-sel').value;
+  if (v !== '__custom__') return v;
+  const s = document.getElementById('cs-start').value;
+  const e = document.getElementById('cs-end').value;
+  if (!s || !e) { alert('Set custom start and end time.'); return null; }
+  const fmt = t => { const [h,m]=t.split(':'); const H=+h; return `${(H%12||12).toString().padStart(2,'0')}:${m} ${H<12?'AM':'PM'}`; };
+  return fmt(s) + ' - ' + fmt(e);
+}
+function _getParams() {
+  const vids = [...document.querySelectorAll('.agent-cb:checked')].map(c => c.value);
+  const sd   = document.getElementById('start-date').value;
+  const ed   = document.getElementById('end-date').value;
+  const sl   = _getShiftLabel();
+  const wo   = [...document.querySelectorAll('.weekoff-cb:checked')].map(c => c.value);
+  return { vids, sd, ed, sl, wo };
+}
+async function generatePreview() {
+  const { vids, sd, ed, sl, wo } = _getParams();
+  if (!vids.length)  { alert('Select at least one associate.'); return; }
+  if (!sd || !ed)    { alert('Set start and end date.'); return; }
+  if (!sl)           return;
+  if (sd > ed)       { alert('Start date must be before end date.'); return; }
+  const fd = new FormData();
+  vids.forEach(v => fd.append('vcc_ids', v));
+  fd.append('start_date', sd); fd.append('end_date', ed);
+  fd.append('shift_label', sl);
+  wo.forEach(w => fd.append('week_off', w));
+  document.getElementById('preview-area').innerHTML = '<div class="w-full text-center text-gray-400 py-16 animate-pulse">Generating preview...</div>';
+  const r = await fetch('/admin/adhoc/preview', { method: 'POST', body: fd });
+  document.getElementById('preview-area').innerHTML = await r.text();
+}
+function exportRoster(fmt) {
+  const { vids, sd, ed, sl, wo } = _getParams();
+  if (!vids.length) { alert('Select at least one associate.'); return; }
+  if (!sl) return;
+  const p = new URLSearchParams();
+  p.set('vcc_ids', vids.join(','));
+  p.set('start_date', sd); p.set('end_date', ed);
+  p.set('shift_label', sl); p.set('fmt', fmt);
+  p.set('week_off', wo.join(','));
+  window.location.href = '/admin/adhoc/export?' + p.toString();
+}
+// Set default end date = today + 30 days
+const d = new Date(); d.setDate(d.getDate()+30);
+document.getElementById('end-date').value = d.toISOString().slice(0,10);
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+data/roster.db
+.env
+*.egg-info/
+dist/
+build/
+.DS_Store
+Thumbs.db
+# GCP credentials - NEVER commit these
+gcp_service_account.json
+*.json
+!package.json

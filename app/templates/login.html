@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Login - CES IND Transport Roster</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={theme:{extend:{colors:{walmart:{blue:'#0053e2',yellow:'#ffc220'}}}}}</script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center font-sans">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-8">
+    <!-- Logo -->
+    <div class="flex justify-center mb-6">
+      <div class="flex items-center gap-3">
+        <div class="bg-walmart-yellow rounded-lg p-2">
+          <span class="text-walmart-blue font-black text-2xl leading-none">W</span>
+        </div>
+        <div>
+          <p class="font-black text-walmart-blue text-lg leading-tight">Transport Roster</p>
+          <p class="text-gray-400 text-xs">Admin Login</p>
+        </div>
+      </div>
+    </div>
+
+    {% if error %}
+    <div class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mb-4">
+      {{ error }}
+    </div>
+    {% endif %}
+
+    <form method="post" action="/login" class="space-y-4">
+      <input type="hidden" name="next" value="{{ next }}">
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Username</label>
+        <input name="username" type="text" required autocomplete="username"
+          placeholder="CESINDANALYST"
+          class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm
+                 focus:outline-none focus:ring-2 focus:ring-walmart-blue focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Password</label>
+        <input name="password" type="password" required autocomplete="current-password"
+          class="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm
+                 focus:outline-none focus:ring-2 focus:ring-walmart-blue focus:border-transparent">
+      </div>
+      <button type="submit"
+        class="w-full bg-walmart-blue hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg
+               text-sm transition-colors">
+        Login as Admin
+      </button>
+    </form>
+
+    <p class="text-center text-xs text-gray-400 mt-4">
+      Viewers don't need to log in —
+      <a href="/" class="text-walmart-blue hover:underline">go back to roster</a>
+    </p>
+  </div>
+</body>
+</html>

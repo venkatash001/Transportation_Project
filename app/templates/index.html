@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CES IND Transport Roster</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <link rel="stylesheet" href="/static/style.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            walmart: { blue: '#0053e2', yellow: '#ffc220', dark: '#1a1f36' }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans">
+
+<!-- ===== HEADER ===== -->
+<header class="bg-walmart-blue shadow-lg sticky top-0 z-50">
+  <div class="max-w-full px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="bg-walmart-yellow rounded px-2 py-1">
+        <span class="text-walmart-blue font-black text-lg leading-none">W</span>
+      </div>
+      <div>
+        <h1 class="text-white font-bold text-lg leading-tight">CES IND Transport Roster</h1>
+        <p class="text-blue-200 text-xs">Associate Shift Schedule Matrix · IST Time</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <!-- Status pill -->
+      <div id="status-badge" class="text-xs text-blue-100 bg-blue-800 rounded-full px-3 py-1">
+        {% if status.last_refresh %}
+          Last sync: {{ last_refresh }}
+        {% else %}
+          <span class="text-yellow-300">No data &mdash; click Refresh</span>
+        {% endif %}
+      </div>
+      <div class="text-xs text-blue-200 hidden sm:block">{{ total_records }} records</div>
+
+      {% if is_admin %}
+        <!-- Admin controls -->
+        <span class="bg-amber-400 text-amber-900 text-xs font-bold px-3 py-1 rounded-full">ADMIN</span>
+        <a href="/admin/overrides" class="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg font-semibold transition-colors">Override Editor</a>
+        <a href="/admin/adhoc" class="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg font-semibold transition-colors">Ad-Hoc Roster</a>
+        <button id="refresh-btn"
+          hx-post="/api/refresh" hx-target="#refresh-result" hx-swap="innerHTML" hx-indicator="#refresh-spinner"
+          class="flex items-center gap-2 bg-walmart-yellow text-walmart-blue font-bold text-sm px-4 py-2 rounded-lg hover:bg-yellow-400 transition-colors"
+          onclick="this.disabled=true; setTimeout(()=>this.disabled=false, 30000)">
+          <svg id="refresh-spinner" class="htmx-indicator animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+          </svg>
+          Refresh from GCP
+        </button>
+        <a href="/logout" class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg font-semibold transition-colors">Logout</a>
+      {% else %}
+        <!-- Viewer: show login link -->
+        <a href="/login" class="text-xs bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg font-semibold transition-colors">Admin Login</a>
+      {% endif %}
+    </div>
+  </div>
+  <div id="refresh-result" class="text-center text-xs pb-1 text-blue-100"></div>
+</header>
+
+<!-- ===== CONTROLS BAR ===== -->
+<div class="bg-white border-b border-gray-200 shadow-sm sticky top-[65px] z-40 px-4 py-2">
+  <div class="flex flex-wrap items-center gap-3">
+
+    <!-- Team filter -->
+    <div class="flex items-center gap-2">
+      <label class="text-xs font-semibold text-gray-600 whitespace-nowrap">Team:</label>
+      <select id="team-filter"
+        class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-walmart-blue bg-white"
+        onchange="applyFilters()">
+        <option value="">All Teams</option>
+        {% for t in teams %}
+        <option value="{{ t }}">{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Search -->
+    <div class="flex items-center gap-2">
+      <label class="text-xs font-semibold text-gray-600">Search:</label>
+      <input id="search-input" type="text" placeholder="Name / User ID / WIN..."
+        class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 w-52 focus:outline-none focus:ring-2 focus:ring-walmart-blue"
+        oninput="filterRows(this.value)">
+    </div>
+
+    <div class="flex-1"></div>
+
+    <!-- Export buttons -->
+    <div class="flex items-center gap-2">
+      <span class="text-xs font-semibold text-gray-500">Export:</span>
+      <a id="btn-csv" href="/export/csv?scope=future"
+        class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-3 py-1.5 rounded-lg border border-gray-300 transition-colors">
+        CSV
+      </a>
+      <a id="btn-excel" href="/export/excel?scope=future"
+        class="text-xs bg-green-50 hover:bg-green-100 text-green-700 font-semibold px-3 py-1.5 rounded-lg border border-green-300 transition-colors">
+        Excel
+      </a>
+      <a id="btn-pdf" href="/export/pdf?scope=future"
+        class="text-xs bg-red-50 hover:bg-red-100 text-red-700 font-semibold px-3 py-1.5 rounded-lg border border-red-300 transition-colors">
+        PDF
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TAB NAV ===== -->
+<div class="bg-white border-b border-gray-200 px-4">
+  <nav class="flex gap-1" role="tablist">
+    <button id="tab-future"
+      class="tab-btn tab-active px-5 py-3 text-sm font-semibold border-b-2 border-walmart-blue text-walmart-blue"
+      hx-get="/roster/future"
+      hx-target="#tab-content"
+      hx-swap="innerHTML"
+      hx-include="#team-filter"
+      onclick="activateTab('future')">
+      Future Schedule (Next 30 Days)
+    </button>
+    <button id="tab-historical"
+      class="tab-btn px-5 py-3 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+      hx-get="/roster/historical"
+      hx-target="#tab-content"
+      hx-swap="innerHTML"
+      hx-include="#team-filter"
+      onclick="activateTab('historical')">
+      Historical (Last 90 Days)
+    </button>
+    <button id="tab-summary"
+      class="tab-btn px-5 py-3 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+      hx-get="/summary"
+      hx-target="#tab-content"
+      hx-swap="innerHTML"
+      hx-include="#team-filter"
+      onclick="activateTab('summary')">
+      Summary
+    </button>
+  </nav>
+</div>
+
+<!-- ===== MAIN CONTENT ===== -->
+<main class="px-4 py-4">
+
+  <!-- GCP Auth banner (shows only when DB is empty) -->
+  {% if total_records == 0 %}
+  <div class="mb-4 bg-amber-50 border border-amber-300 rounded-xl p-4 flex gap-4 items-start">
+    <div class="text-amber-500 text-2xl mt-0.5">&#9888;</div>
+    <div>
+      <p class="font-bold text-amber-800 text-sm">GCP credentials not set up yet</p>
+      <p class="text-amber-700 text-xs mt-1">
+        The app needs your Google Cloud credentials to fetch data from BigQuery.
+        <strong>Two options:</strong>
+      </p>
+      <ol class="text-amber-700 text-xs mt-2 ml-4 list-decimal space-y-1">
+        <li>
+          <strong>Service Account Key (easiest):</strong> Download a JSON key from
+          <a href="https://console.cloud.google.com/iam-admin/serviceaccounts?project=wmt-cc-datasphere-prod"
+             class="underline" target="_blank">GCP Console</a>,
+          rename it <code class="bg-amber-100 px-1 rounded">gcp_service_account.json</code>
+          and drop it in the project folder next to <code class="bg-amber-100 px-1 rounded">Run Me.bat</code>.
+        </li>
+        <li>
+          <strong>gcloud CLI:</strong> Install Google Cloud SDK from
+          <a href="https://cloud.google.com/sdk/docs/install-sdk#windows" class="underline" target="_blank">cloud.google.com</a>,
+          then run <code class="bg-amber-100 px-1 rounded">gcloud auth application-default login</code> in a terminal.
+        </li>
+      </ol>
+      <p class="text-amber-600 text-xs mt-2">
+        See <strong>GCP_Auth_Setup.md</strong> in the project folder for the full step-by-step guide.
+        Once credentials are ready, click <strong>Refresh from GCP</strong> above.
+      </p>
+    </div>
+  </div>
+  {% endif %}
+  <div id="tab-content"
+    hx-get="/roster/future"
+    hx-trigger="load"
+    hx-swap="innerHTML"
+    hx-include="#team-filter"
+    class="relative">
+    <div class="text-center py-20 text-gray-400">
+      <div class="animate-pulse text-lg">Loading schedule...</div>
+    </div>
+  </div>
+</main>
+
+<!-- ===== SCRIPTS ===== -->
+<script>
+  let activeTab = 'future';
+
+  function activateTab(name) {
+    activeTab = name;
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.classList.remove('tab-active','border-walmart-blue','text-walmart-blue');
+      btn.classList.add('border-transparent','text-gray-500');
+    });
+    const active = document.getElementById('tab-' + name);
+    active.classList.add('tab-active','border-walmart-blue','text-walmart-blue');
+    active.classList.remove('border-transparent','text-gray-500');
+
+    // Update export links
+    const team = document.getElementById('team-filter').value;
+    const scope = (name === 'historical') ? 'historical' : 'future';
+    document.getElementById('btn-csv').href   = `/export/csv?scope=${scope}&team=${team}`;
+    document.getElementById('btn-excel').href = `/export/excel?scope=${scope}&team=${team}`;
+    document.getElementById('btn-pdf').href   = `/export/pdf?scope=${scope}&team=${team}`;
+
+    // Hide/show export in summary tab
+    const exportArea = document.querySelector('.flex.items-center.gap-2:last-child');
+    if (exportArea) exportArea.style.display = (name === 'summary') ? 'none' : 'flex';
+  }
+
+  function applyFilters() {
+    const team  = document.getElementById('team-filter').value;
+    const scope = (activeTab === 'historical') ? 'historical' : 'future';
+    const endpoint = (activeTab === 'summary')
+      ? `/summary?team=${team}&scope=${scope}`
+      : `/roster/${activeTab}?team=${team}`;
+
+    htmx.ajax('GET', endpoint, { target: '#tab-content', swap: 'innerHTML' });
+
+    document.getElementById('btn-csv').href   = `/export/csv?scope=${scope}&team=${team}`;
+    document.getElementById('btn-excel').href = `/export/excel?scope=${scope}&team=${team}`;
+    document.getElementById('btn-pdf').href   = `/export/pdf?scope=${scope}&team=${team}`;
+  }
+
+  function filterRows(query) {
+    const q = query.toLowerCase();
+    document.querySelectorAll('tbody tr.roster-row').forEach(row => {
+      const text = row.dataset.search || '';
+      row.style.display = text.includes(q) ? '' : 'none';
+    });
+  }
+
+  // Update status badge after refresh
+  document.body.addEventListener('htmx:afterRequest', function(e) {
+    if (e.detail.pathInfo && e.detail.pathInfo.requestPath === '/api/refresh') {
+      const resp = JSON.parse(e.detail.xhr.responseText || '{}');
+      const badge = document.getElementById('status-badge');
+      if (resp.success) {
+        badge.textContent = 'Refreshed: ' + resp.count + ' records';
+        badge.className = 'text-xs text-green-100 bg-green-700 rounded-full px-3 py-1';
+        setTimeout(() => applyFilters(), 1000);
+      } else {
+        badge.textContent = 'Refresh failed: ' + resp.message;
+        badge.className = 'text-xs text-red-100 bg-red-700 rounded-full px-3 py-1';
+      }
+      document.getElementById('refresh-btn').disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
