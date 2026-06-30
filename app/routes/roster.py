@@ -1,5 +1,6 @@
 """
 routes/roster.py - Future Schedule and Historical roster tab endpoints.
+Accepts: team, location, l1, l2, sort_by as query params.
 """
 import sys
 from pathlib import Path
@@ -19,9 +20,23 @@ router    = APIRouter()
 templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
 
 
-def _render_roster(request: Request, start: date, end: date, team: str, tab: str, empty_msg: str):
-    dates    = date_range(start, end)
-    rows     = get_roster_for_range(start.isoformat(), end.isoformat(), team)
+def _render_roster(
+    request: Request,
+    start: date,
+    end: date,
+    team: str,
+    location: str,
+    l1: str,
+    l2: str,
+    sort_by: str,
+    tab: str,
+    empty_msg: str,
+):
+    dates     = date_range(start, end)
+    rows      = get_roster_for_range(
+        start.isoformat(), end.isoformat(),
+        team=team, location=location, l1=l1, l2=l2, sort_by=sort_by,
+    )
     overrides = get_overrides_for_range(start.isoformat(), end.isoformat())
     agents, dates = build_matrix(rows, dates, overrides)
     return templates.TemplateResponse("partials/roster_table.html", {
@@ -37,16 +52,36 @@ def _render_roster(request: Request, start: date, end: date, team: str, tab: str
 
 
 @router.get("/roster/future", response_class=HTMLResponse)
-async def future_roster(request: Request, team: str = Query("")):
+async def future_roster(
+    request:  Request,
+    team:     str = Query(""),
+    location: str = Query(""),
+    l1:       str = Query(""),
+    l2:       str = Query(""),
+    sort_by:  str = Query("name_asc"),
+):
     today = date.today()
-    return _render_roster(request, today, today + timedelta(days=FUTURE_DAYS),
-                          team, "future",
-                          "No future schedules found. Admin: click Refresh from GCP.")
+    return _render_roster(
+        request, today, today + timedelta(days=FUTURE_DAYS),
+        team, location, l1, l2, sort_by,
+        "future",
+        "No future schedules found. Admin: click Refresh from GCP.",
+    )
 
 
 @router.get("/roster/historical", response_class=HTMLResponse)
-async def historical_roster(request: Request, team: str = Query("")):
+async def historical_roster(
+    request:  Request,
+    team:     str = Query(""),
+    location: str = Query(""),
+    l1:       str = Query(""),
+    l2:       str = Query(""),
+    sort_by:  str = Query("name_asc"),
+):
     today = date.today()
-    return _render_roster(request, today - timedelta(days=HISTORICAL_DAYS),
-                          today - timedelta(days=1), team, "historical",
-                          "No historical data found. Admin: click Refresh from GCP.")
+    return _render_roster(
+        request, today - timedelta(days=HISTORICAL_DAYS), today - timedelta(days=1),
+        team, location, l1, l2, sort_by,
+        "historical",
+        "No historical data found. Admin: click Refresh from GCP.",
+    )

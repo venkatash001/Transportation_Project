@@ -72,46 +72,97 @@
 
 <!-- ===== CONTROLS BAR ===== -->
 <div class="bg-white border-b border-gray-200 shadow-sm sticky top-[65px] z-40 px-4 py-2">
-  <div class="flex flex-wrap items-center gap-3">
 
-    <!-- Team filter -->
-    <div class="flex items-center gap-2">
-      <label class="text-xs font-semibold text-gray-600 whitespace-nowrap">Team:</label>
-      <select id="team-filter"
-        class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-walmart-blue bg-white"
+  <!-- Row 1: Slicers + Sort + Search -->
+  <div class="flex flex-wrap items-center gap-2 mb-2">
+
+    <!-- Sort -->
+    <div class="flex items-center gap-1.5">
+      <label class="text-xs font-bold text-gray-500 whitespace-nowrap">Sort:</label>
+      <select id="sort-filter"
+        class="text-xs border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-walmart-blue bg-white"
         onchange="applyFilters()">
-        <option value="">All Teams</option>
-        {% for t in teams %}
-        <option value="{{ t }}">{{ t }}</option>
-        {% endfor %}
+        <option value="name_asc">Name A-Z</option>
+        <option value="name_desc">Name Z-A</option>
+        <option value="team_asc">Team</option>
+        <option value="l1_asc">L1 Manager</option>
+        <option value="win_asc">WIN ID</option>
       </select>
     </div>
 
+    <div class="h-5 border-l border-gray-200"></div>
+
+    <!-- Team slicer -->
+    <div class="flex items-center gap-1.5">
+      <label class="text-xs font-bold text-gray-500 whitespace-nowrap">Team:</label>
+      <select id="team-filter"
+        class="text-xs border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-walmart-blue bg-white max-w-[160px]"
+        onchange="applyFilters()">
+        <option value="">All Teams</option>
+        {% for t in teams %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+      </select>
+    </div>
+
+    <!-- Location slicer -->
+    <div class="flex items-center gap-1.5">
+      <label class="text-xs font-bold text-gray-500 whitespace-nowrap">Location:</label>
+      <select id="location-filter"
+        class="text-xs border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-walmart-blue bg-white"
+        onchange="applyFilters()">
+        <option value="">All</option>
+        {% for loc in locations %}<option value="{{ loc }}">{{ loc }}</option>{% endfor %}
+      </select>
+    </div>
+
+    <!-- L1 Manager slicer -->
+    <div class="flex items-center gap-1.5">
+      <label class="text-xs font-bold text-gray-500 whitespace-nowrap">L1 Manager:</label>
+      <select id="l1-filter"
+        class="text-xs border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-walmart-blue bg-white max-w-[160px]"
+        onchange="applyFilters()">
+        <option value="">All</option>
+        {% for m in l1_managers %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+      </select>
+    </div>
+
+    <!-- L2 Manager slicer -->
+    <div class="flex items-center gap-1.5">
+      <label class="text-xs font-bold text-gray-500 whitespace-nowrap">L2 Manager:</label>
+      <select id="l2-filter"
+        class="text-xs border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-walmart-blue bg-white max-w-[160px]"
+        onchange="applyFilters()">
+        <option value="">All</option>
+        {% for m in l2_managers %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+      </select>
+    </div>
+
+    <!-- Reset button -->
+    <button onclick="resetFilters()"
+      class="text-xs text-gray-500 hover:text-red-600 border border-gray-300 hover:border-red-300 rounded-lg px-2 py-1.5 transition-colors whitespace-nowrap">
+      Reset
+    </button>
+
+    <div class="h-5 border-l border-gray-200"></div>
+
     <!-- Search -->
-    <div class="flex items-center gap-2">
-      <label class="text-xs font-semibold text-gray-600">Search:</label>
+    <div class="flex items-center gap-1.5">
+      <label class="text-xs font-bold text-gray-500">Search:</label>
       <input id="search-input" type="text" placeholder="Name / User ID / WIN..."
-        class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 w-52 focus:outline-none focus:ring-2 focus:ring-walmart-blue"
+        class="text-xs border border-gray-300 rounded-lg px-2 py-1.5 w-44 focus:outline-none focus:ring-2 focus:ring-walmart-blue"
         oninput="filterRows(this.value)">
     </div>
 
     <div class="flex-1"></div>
 
     <!-- Export buttons -->
-    <div class="flex items-center gap-2">
-      <span class="text-xs font-semibold text-gray-500">Export:</span>
+    <div class="flex items-center gap-1.5">
+      <span class="text-xs font-bold text-gray-500">Export:</span>
       <a id="btn-csv" href="/export/csv?scope=future"
-        class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-3 py-1.5 rounded-lg border border-gray-300 transition-colors">
-        CSV
-      </a>
+        class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-3 py-1.5 rounded-lg border border-gray-300 transition-colors">CSV</a>
       <a id="btn-excel" href="/export/excel?scope=future"
-        class="text-xs bg-green-50 hover:bg-green-100 text-green-700 font-semibold px-3 py-1.5 rounded-lg border border-green-300 transition-colors">
-        Excel
-      </a>
+        class="text-xs bg-green-50 hover:bg-green-100 text-green-700 font-semibold px-3 py-1.5 rounded-lg border border-green-300 transition-colors">Excel</a>
       <a id="btn-pdf" href="/export/pdf?scope=future"
-        class="text-xs bg-red-50 hover:bg-red-100 text-red-700 font-semibold px-3 py-1.5 rounded-lg border border-red-300 transition-colors">
-        PDF
-      </a>
+        class="text-xs bg-red-50 hover:bg-red-100 text-red-700 font-semibold px-3 py-1.5 rounded-lg border border-red-300 transition-colors">PDF</a>
     </div>
   </div>
 </div>
@@ -121,28 +172,16 @@
   <nav class="flex gap-1" role="tablist">
     <button id="tab-future"
       class="tab-btn tab-active px-5 py-3 text-sm font-semibold border-b-2 border-walmart-blue text-walmart-blue"
-      hx-get="/roster/future"
-      hx-target="#tab-content"
-      hx-swap="innerHTML"
-      hx-include="#team-filter"
       onclick="activateTab('future')">
       Future Schedule (Next 30 Days)
     </button>
     <button id="tab-historical"
       class="tab-btn px-5 py-3 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-      hx-get="/roster/historical"
-      hx-target="#tab-content"
-      hx-swap="innerHTML"
-      hx-include="#team-filter"
       onclick="activateTab('historical')">
       Historical (Last 90 Days)
     </button>
     <button id="tab-summary"
       class="tab-btn px-5 py-3 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-      hx-get="/summary"
-      hx-target="#tab-content"
-      hx-swap="innerHTML"
-      hx-include="#team-filter"
       onclick="activateTab('summary')">
       Summary
     </button>
@@ -187,7 +226,6 @@
     hx-get="/roster/future"
     hx-trigger="load"
     hx-swap="innerHTML"
-    hx-include="#team-filter"
     class="relative">
     <div class="text-center py-20 text-gray-400">
       <div class="animate-pulse text-lg">Loading schedule...</div>
@@ -199,6 +237,16 @@
 <script>
   let activeTab = 'future';
 
+  function _getFilters() {
+    return {
+      team:     document.getElementById('team-filter').value,
+      location: document.getElementById('location-filter').value,
+      l1:       document.getElementById('l1-filter').value,
+      l2:       document.getElementById('l2-filter').value,
+      sort_by:  document.getElementById('sort-filter').value,
+    };
+  }
+
   function activateTab(name) {
     activeTab = name;
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -208,31 +256,44 @@
     const active = document.getElementById('tab-' + name);
     active.classList.add('tab-active','border-walmart-blue','text-walmart-blue');
     active.classList.remove('border-transparent','text-gray-500');
-
-    // Update export links
-    const team = document.getElementById('team-filter').value;
-    const scope = (name === 'historical') ? 'historical' : 'future';
-    document.getElementById('btn-csv').href   = `/export/csv?scope=${scope}&team=${team}`;
-    document.getElementById('btn-excel').href = `/export/excel?scope=${scope}&team=${team}`;
-    document.getElementById('btn-pdf').href   = `/export/pdf?scope=${scope}&team=${team}`;
-
-    // Hide/show export in summary tab
-    const exportArea = document.querySelector('.flex.items-center.gap-2:last-child');
-    if (exportArea) exportArea.style.display = (name === 'summary') ? 'none' : 'flex';
+    applyFilters();
   }
 
   function applyFilters() {
-    const team  = document.getElementById('team-filter').value;
+    const f = _getFilters();
     const scope = (activeTab === 'historical') ? 'historical' : 'future';
-    const endpoint = (activeTab === 'summary')
-      ? `/summary?team=${team}&scope=${scope}`
-      : `/roster/${activeTab}?team=${team}`;
+    let url;
+    if (activeTab === 'summary') {
+      url = `/summary?team=${encodeURIComponent(f.team)}&scope=${scope}`;
+    } else {
+      url = `/roster/${activeTab}?team=${encodeURIComponent(f.team)}`
+          + `&location=${encodeURIComponent(f.location)}`
+          + `&l1=${encodeURIComponent(f.l1)}`
+          + `&l2=${encodeURIComponent(f.l2)}`
+          + `&sort_by=${encodeURIComponent(f.sort_by)}`;
+    }
+    htmx.ajax('GET', url, { target: '#tab-content', swap: 'innerHTML' });
+    // sync export links
+    const base = `?scope=${scope}&team=${encodeURIComponent(f.team)}`
+               + `&location=${encodeURIComponent(f.location)}`
+               + `&l1=${encodeURIComponent(f.l1)}&l2=${encodeURIComponent(f.l2)}`;
+    document.getElementById('btn-csv').href   = `/export/csv${base}`;
+    document.getElementById('btn-excel').href = `/export/excel${base}`;
+    document.getElementById('btn-pdf').href   = `/export/pdf${base}`;
+    // hide exports on summary tab
+    document.querySelectorAll('#export-btns').forEach(el => {
+      el.style.display = (activeTab === 'summary') ? 'none' : 'flex';
+    });
+  }
 
-    htmx.ajax('GET', endpoint, { target: '#tab-content', swap: 'innerHTML' });
-
-    document.getElementById('btn-csv').href   = `/export/csv?scope=${scope}&team=${team}`;
-    document.getElementById('btn-excel').href = `/export/excel?scope=${scope}&team=${team}`;
-    document.getElementById('btn-pdf').href   = `/export/pdf?scope=${scope}&team=${team}`;
+  function resetFilters() {
+    ['team-filter','location-filter','l1-filter','l2-filter'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('sort-filter').value = 'name_asc';
+    document.getElementById('search-input').value = '';
+    document.querySelectorAll('tbody tr.roster-row').forEach(r => r.style.display = '');
+    applyFilters();
   }
 
   function filterRows(query) {
@@ -243,7 +304,7 @@
     });
   }
 
-  // Update status badge after refresh
+  // Update status badge after GCP refresh
   document.body.addEventListener('htmx:afterRequest', function(e) {
     if (e.detail.pathInfo && e.detail.pathInfo.requestPath === '/api/refresh') {
       const resp = JSON.parse(e.detail.xhr.responseText || '{}');
@@ -251,7 +312,7 @@
       if (resp.success) {
         badge.textContent = 'Refreshed: ' + resp.count + ' records';
         badge.className = 'text-xs text-green-100 bg-green-700 rounded-full px-3 py-1';
-        setTimeout(() => applyFilters(), 1000);
+        setTimeout(() => applyFilters(), 1200);
       } else {
         badge.textContent = 'Refresh failed: ' + resp.message;
         badge.className = 'text-xs text-red-100 bg-red-700 rounded-full px-3 py-1';

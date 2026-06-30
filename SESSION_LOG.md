@@ -50,7 +50,8 @@
 | 10 | 2026-06-26 | Next approach agreed: Excel master file upload via Admin UI to populate agent_master table. Deferred to Monday. All saved. | 85191f1+ | Kratos |
 | 11 | 2026-06-29 | Pre-flight check on restart. Server confirmed running (PID 23056). DB: 81,288 rows / 1,033 agents. BQ refresh last ran 2026-06-26. All packages OK. Excel master upload confirmed as Monday priority. | b98f23e | Kratos |
 | 12 | 2026-06-30 | **agent_master feature shipped.** HeadCount Excel (MAA + BLR) parsed and loaded as source of truth. 1,619 agents in agent_master. All roster queries LEFT JOINed to master. COALESCE: Excel wins over BQ for WIN ID, Name, LOB, Role, L1/L2 Manager. Admin UI at /admin/master. Yellow "Master Data" nav button added. | 0abbdf6 | Kratos |
-| 13 | 2026-06-30 | Session recap + memory recall. Confirmed last commit (0abbdf6) and full project state. Session log updated. | -- | Kratos |
+| 13 | 2026-06-30 | Session recap + memory recall. Confirmed last commit (0abbdf6) and full project state. Session log updated. | 9d0311b | Kratos |
+| 14 | 2026-06-30 | **Performance fix + bug hunt.** Diagnosed 3 bugs: (1) Override matrix blank - INNER JOIN killing all future agents. (2) Adhoc preview 403 - session cookie lost between navigations. (3) Tab slowness >30s - LOWER(TRIM()) in SQL JOIN defeats all indexes on 83k rows. Fixes applied: rewrote get_all_agents() + get_agents_for_manager() to query agent_master (1,619 rows) directly. Replaced INNER JOIN SQL enrichment in get_roster_for_range() with Python dict lookup (get_master_lookup()). Override route now passes l1 filter to DB query instead of Python filtering 83k rows. New server: PID 33724/29308. Fixes applied, testing deferred to tomorrow. | -- | Kratos |
 
 ---
 
@@ -175,6 +176,9 @@
 | 5 | AI Launchpad hosting | PLANNED | Use launchpad sub-agent to deploy. Dockerfile needed. Cloud SQL for DB. Cloud SQL = same schema, change one line in config.py. |
 | 6 | Excel master file upload UI |  DONE | Built in Session 12 — /admin/master with drag-drop upload + OneDrive auto-reload. |
 | 7 | GCP credentials (for production) | OPEN | Service account key OR gcloud ADC needed. See GCP_Auth_Setup.md. |
+| 8 | Override matrix blank after HC file | IN PROGRESS | Root cause: INNER JOIN + LOWER(TRIM()) on 83k rows killed index. Fix applied: get_roster_for_range() now does Python enrichment via master dict. Test tomorrow. |
+| 9 | Tab navigation too slow (>30s) | IN PROGRESS | Root cause: same SQL JOIN issue. Fix applied: get_roster_for_range() now: fast date scan + O(n) Python dict lookup. Test tomorrow. |
+| 10 | Adhoc preview 403 Forbidden | RESOLVED | Root cause: session cookie lost - user was not logged in. After login it works correctly. No code change needed. |
 
 ---
 
@@ -290,9 +294,11 @@
 | 2026-06-30 | agent_master table as source of truth for all agent metadata | BQ CS_AGNT data quality too poor (NULLs, multi-row, wrong LOB names); HeadCount Excel is authoritative |
 | 2026-06-30 | COALESCE: Excel wins over BQ on all metadata fields | Ensures clean names, correct teams, and valid WIN IDs in every UI view |
 | 2026-06-30 | login_id stored lowercase in agent_master | Matches BQ format for case-insensitive JOIN |
-| 2026-06-30 | Auto-load on startup if agent_master is empty | Zero-config startup — no manual step needed after fresh install |
+| 2026-06-30 | Auto-load on startup if agent_master is empty | Zero-config startup - no manual step needed after fresh install |
+| 2026-06-30 | Eliminate SQL JOIN in get_roster_for_range() | LOWER(TRIM()) on 83k rows kills SQLite indexes and causes >30s queries. Solution: load agent_master as Python dict (1,619 rows), do fast date-indexed roster scan, enrich rows in Python with O(n) dict lookup. Zero join overhead. |
+| 2026-06-30 | get_all_agents() and get_agents_for_manager() query agent_master directly | Avoids scanning 83k roster rows for agent lists. 1,619 agent_master rows is trivially fast. vcc_id resolved via a cheap MIN() subquery on roster. |
 
 ---
 
-*Last updated: 2026-06-30 | Session 13 | Updated by: Kratos (code-puppy-c9f12d)*
-*Status: agent_master COMPLETE. 1,619 agents loaded. All metadata enriched from Excel. Next: AI Launchpad deployment.*
+*Last updated: 2026-06-30 | Session 14 | Updated by: Kratos (code-puppy-c9f12d)*
+*Status: Performance fix IN PROGRESS. Fixes applied to db.py + admin.py, not yet tested end-to-end. Resume tomorrow.*

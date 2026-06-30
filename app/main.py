@@ -17,7 +17,7 @@ from fastapi.templating import Jinja2Templates
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from config import HOST, PORT, REFRESH_INTERVAL_HOURS, APP_DIR
-from db import init_db, get_refresh_status, get_teams
+from db import init_db, get_refresh_status, get_teams, get_l1_managers, get_l2_managers, get_locations
 from refresh import run_refresh
 from master import auto_load_master_if_empty
 from auth import check_credentials, set_session, clear_session, is_admin, get_role
@@ -69,6 +69,9 @@ app.include_router(admin_router)
 async def index(request: Request):
     status       = get_refresh_status()
     teams        = get_teams()
+    locations    = get_locations()
+    l1_managers  = get_l1_managers()
+    l2_managers  = get_l2_managers()
     last_refresh = status["last_refresh"]
     if last_refresh:
         try:
@@ -80,6 +83,9 @@ async def index(request: Request):
         "status":        status,
         "last_refresh":  last_refresh,
         "teams":         teams,
+        "locations":     locations,
+        "l1_managers":   l1_managers,
+        "l2_managers":   l2_managers,
         "total_records": status["total_records"],
         "is_admin":      is_admin(request),
         "role":          get_role(request),

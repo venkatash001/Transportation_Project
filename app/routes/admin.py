@@ -178,11 +178,9 @@ async def override_page(request: Request, l1: str = Query("")):
     # Build a mini matrix for selected agents if any
     matrix_agents: list[dict] = []
     dates: list[date] = []
-    if agents:
-        vcc_ids = [a["vcc_id"] for a in agents]
-        rows = get_roster_for_range(today.isoformat(), end.isoformat())
-        rows = [r for r in rows if r["vcc_id"] in vcc_ids]
+    if agents and l1:
         dates = date_range(today, end)
+        rows  = get_roster_for_range(today.isoformat(), end.isoformat(), l1=l1)
         matrix_agents, dates = build_matrix(rows, dates, overrides)
 
     return templates.TemplateResponse("admin/overrides.html", {

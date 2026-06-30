@@ -82,11 +82,12 @@ def init_db() -> None:
                 message      TEXT
             );
 
-            CREATE INDEX IF NOT EXISTS idx_roster_date ON roster(schedule_date);
-            CREATE INDEX IF NOT EXISTS idx_roster_team ON roster(team_name);
-            CREATE INDEX IF NOT EXISTS idx_roster_vcc  ON roster(vcc_id);
-            CREATE INDEX IF NOT EXISTS idx_ovr_vcc     ON roster_overrides(vcc_id);
-            CREATE INDEX IF NOT EXISTS idx_ovr_date    ON roster_overrides(schedule_date);
+            CREATE INDEX IF NOT EXISTS idx_roster_date  ON roster(schedule_date);
+            CREATE INDEX IF NOT EXISTS idx_roster_team  ON roster(team_name);
+            CREATE INDEX IF NOT EXISTS idx_roster_vcc   ON roster(vcc_id);
+            CREATE INDEX IF NOT EXISTS idx_roster_login ON roster(login_id);
+            CREATE INDEX IF NOT EXISTS idx_ovr_vcc      ON roster_overrides(vcc_id);
+            CREATE INDEX IF NOT EXISTS idx_ovr_date     ON roster_overrides(schedule_date);
         """)
 
         # --- Column migration: add shift_type if it doesn't exist yet ---
@@ -166,6 +167,26 @@ def get_master_teams() -> list[str]:
         rows = conn.execute(
             "SELECT DISTINCT lob FROM agent_master "
             "WHERE lob IS NOT NULL AND lob != '' ORDER BY lob"
+        ).fetchall()
+    return [r[0] for r in rows]
+
+
+def get_locations() -> list[str]:
+    """Return distinct source_file values from agent_master (e.g. MAA, BLR)."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT source_file FROM agent_master "
+            "WHERE source_file IS NOT NULL AND source_file != '' ORDER BY source_file"
+        ).fetchall()
+    return [r[0] for r in rows]
+
+
+def get_l2_managers() -> list[str]:
+    """Distinct L2 managers from agent_master (fast, no 83k join)."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT l2_manager FROM agent_master "
+            "WHERE l2_manager IS NOT NULL AND l2_manager != '' ORDER BY l2_manager"
         ).fetchall()
     return [r[0] for r in rows]
 
@@ -288,38 +309,36 @@ def get_teams() -> list[str]:
 
 
 def get_l1_managers() -> list[str]:
+    """Distinct L1 managers from agent_master (fast, no 83k join)."""
     with _connect() as conn:
         rows = conn.execute(
-            """
-            SELECT DISTINCT
-                COALESCE(NULLIF(m.l1_manager,''), NULLIF(r.l1_manager,'')) AS mgr
-            FROM roster r
-            LEFT JOIN agent_master m
-                ON LOWER(TRIM(r.login_id)) = LOWER(TRIM(m.login_id))
-            WHERE mgr IS NOT NULL AND mgr != ''
-            ORDER BY mgr
-            """
+            "SELECT DISTINCT l1_manager FROM agent_master "
+            "WHERE l1_manager IS NOT NULL AND l1_manager != '' ORDER BY l1_manager"
         ).fetchall()
     return [r[0] for r in rows]
 
 
 def get_agents_for_manager(l1_manager: str) -> list[dict]:
+    """Fast agent list from agent_master (1,619 rows). vcc_id resolved via subquery."""
     with _connect() as conn:
         rows = conn.execute(
             """
-            SELECT DISTINCT
-                r.vcc_id,
-                r.login_id,
-                COALESCE(NULLIF(m.win_id,''), NULLIF(r.win_id,''), '')    AS win_id,
-                COALESCE(NULLIF(m.full_name,''), r.full_name, '')          AS full_name,
-                COALESCE(NULLIF(m.lob,''), NULLIF(r.team_name,''), '')     AS team_name,
-                COALESCE(NULLIF(m.role,''), NULLIF(r.role,''), '')         AS role,
-                COALESCE(NULLIF(m.l1_manager,''), NULLIF(r.l1_manager,''), '') AS l1_manager
-            FROM roster r
-            LEFT JOIN agent_master m
-                ON LOWER(TRIM(r.login_id)) = LOWER(TRIM(m.login_id))
-            WHERE COALESCE(NULLIF(m.l1_manager,''), NULLIF(r.l1_manager,''), '') = ?
-            ORDER BY full_name
+            SELECT
+                COALESCE(sub.vcc_id, m.login_id) AS vcc_id,
+                m.login_id,
+                m.win_id,
+                m.full_name,
+                m.lob   AS team_name,
+                m.role,
+                m.l1_manager
+            FROM agent_master m
+            LEFT JOIN (
+                SELECT login_id, MIN(vcc_id) AS vcc_id
+                FROM roster WHERE login_id != ''
+                GROUP BY login_id
+            ) sub ON m.login_id = sub.login_id COLLATE NOCASE
+            WHERE m.l1_manager = ? AND m.full_name != ''
+            ORDER BY m.full_name
             """,
             (l1_manager,),
         ).fetchall()
@@ -327,55 +346,125 @@ def get_agents_for_manager(l1_manager: str) -> list[dict]:
 
 
 def get_all_agents() -> list[dict]:
+    """Fast agent list from agent_master (1,619 rows). vcc_id resolved via subquery."""
     with _connect() as conn:
         rows = conn.execute(
             """
-            SELECT DISTINCT
-                r.vcc_id,
-                r.login_id,
-                COALESCE(NULLIF(m.win_id,''), NULLIF(r.win_id,''), '')    AS win_id,
-                COALESCE(NULLIF(m.full_name,''), r.full_name, '')          AS full_name,
-                COALESCE(NULLIF(m.lob,''), NULLIF(r.team_name,''), '')     AS team_name,
-                COALESCE(NULLIF(m.role,''), NULLIF(r.role,''), '')         AS role,
-                COALESCE(NULLIF(m.l1_manager,''), NULLIF(r.l1_manager,''), '') AS l1_manager
-            FROM roster r
-            LEFT JOIN agent_master m
-                ON LOWER(TRIM(r.login_id)) = LOWER(TRIM(m.login_id))
-            ORDER BY full_name
+            SELECT
+                COALESCE(sub.vcc_id, m.login_id) AS vcc_id,
+                m.login_id,
+                m.win_id,
+                m.full_name,
+                m.lob   AS team_name,
+                m.role,
+                m.l1_manager
+            FROM agent_master m
+            LEFT JOIN (
+                SELECT login_id, MIN(vcc_id) AS vcc_id
+                FROM roster WHERE login_id != ''
+                GROUP BY login_id
+            ) sub ON m.login_id = sub.login_id COLLATE NOCASE
+            WHERE m.full_name != ''
+            ORDER BY m.full_name
             """
         ).fetchall()
     return [dict(r) for r in rows]
 
 
-def get_roster_for_range(start_date: str, end_date: str, team: str = "") -> list[dict]:
-    """Fetch roster rows enriched with agent_master data (Excel wins over BQ)."""
-    cte = """
-        WITH enriched AS (
-            SELECT
-                r.vcc_id,
-                r.login_id,
-                r.first_name,
-                r.last_name,
-                r.bus_line,
-                r.schedule_date, r.start_ist, r.end_ist, r.shift_label, r.shift_type,
-                COALESCE(NULLIF(m.win_id,''),     NULLIF(r.win_id,''),     '') AS win_id,
-                COALESCE(NULLIF(m.full_name,''),  r.full_name,            '') AS full_name,
-                COALESCE(NULLIF(m.lob,''),         NULLIF(r.team_name,''), '') AS team_name,
-                COALESCE(NULLIF(m.role,''),        NULLIF(r.role,''),      '') AS role,
-                COALESCE(NULLIF(m.l1_manager,''), NULLIF(r.l1_manager,''),'') AS l1_manager,
-                COALESCE(NULLIF(m.l2_manager,''), NULLIF(r.l2_manager,''),'') AS l2_manager
-            FROM roster r
-            LEFT JOIN agent_master m
-                ON LOWER(TRIM(r.login_id)) = LOWER(TRIM(m.login_id))
-            WHERE r.schedule_date BETWEEN ? AND ?
-        )
-    """
-    params: list = [start_date, end_date]
-    sql = cte + " SELECT * FROM enriched"
-    if team:
-        sql += " WHERE team_name = ?"
-        params.append(team)
-    sql += " ORDER BY full_name, schedule_date"
+def get_master_lookup() -> dict[str, dict]:
+    """Load agent_master into a dict keyed by lowercase login_id.
+    Trivially fast: 1,619 rows, no join needed."""
     with _connect() as conn:
-        rows = conn.execute(sql, params).fetchall()
-    return [dict(r) for r in rows]
+        rows = conn.execute(
+            "SELECT login_id, win_id, full_name, lob, role, "
+            "l1_manager, l2_manager, ops_manager, source_file "
+            "FROM agent_master"
+        ).fetchall()
+    return {(r["login_id"] or "").lower(): dict(r) for r in rows}
+
+
+_SORT_KEYS: dict[str, tuple] = {
+    "name_asc":  ("full_name",  "schedule_date"),
+    "name_desc": ("full_name",  "schedule_date"),
+    "team_asc":  ("team_name",  "full_name", "schedule_date"),
+    "l1_asc":    ("l1_manager", "full_name", "schedule_date"),
+    "win_asc":   ("win_id",     "full_name", "schedule_date"),
+}
+
+
+def get_roster_for_range(
+    start_date: str, end_date: str,
+    team: str = "", location: str = "",
+    l1: str = "", l2: str = "",
+    sort_by: str = "name_asc",
+) -> list[dict]:
+    """Fetch roster rows enriched with master data.
+
+    Strategy: simple date-indexed roster scan (fast) + O(n) Python dict
+    lookup against agent_master (1,619 rows). No SQL JOIN = no index hell.
+    """
+    master = get_master_lookup()  # {login_id_lower: {fields}} - 1,619 rows
+
+    with _connect() as conn:
+        raw = conn.execute(
+            """
+            SELECT vcc_id, login_id, win_id, full_name, team_name, role,
+                   bus_line, l1_manager, l2_manager,
+                   schedule_date, start_ist, end_ist, shift_label, shift_type
+            FROM roster
+            WHERE schedule_date BETWEEN ? AND ?
+              AND login_id IS NOT NULL AND login_id != ''
+            """,
+            (start_date, end_date),
+        ).fetchall()
+
+    enriched: list[dict] = []
+    for r in raw:
+        login = (r["login_id"] or "").lower().strip()
+        m     = master.get(login, {})
+        record = {
+            "vcc_id":        r["vcc_id"],
+            "login_id":      r["login_id"],
+            "bus_line":      r["bus_line"],
+            "schedule_date": r["schedule_date"],
+            "start_ist":     r["start_ist"],
+            "end_ist":       r["end_ist"],
+            "shift_label":   r["shift_label"],
+            "shift_type":    r["shift_type"],
+            # Excel master wins over BQ where available
+            "win_id":     m.get("win_id")     or r["win_id"]     or "",
+            "full_name":  m.get("full_name")  or r["full_name"]  or "",
+            "team_name":  m.get("lob")        or r["team_name"]  or "",
+            "role":       m.get("role")        or r["role"]       or "",
+            "l1_manager": m.get("l1_manager") or r["l1_manager"] or "",
+            "l2_manager": m.get("l2_manager") or r["l2_manager"] or "",
+            "location":   m.get("source_file") or "",
+        }
+        enriched.append(record)
+
+    # Filter in Python (cheap after the indexed DB fetch)
+    if team:
+        enriched = [r for r in enriched if r["team_name"] == team]
+    if location:
+        enriched = [r for r in enriched if r["location"] == location]
+    if l1:
+        enriched = [r for r in enriched if r["l1_manager"] == l1]
+    if l2:
+        enriched = [r for r in enriched if r["l2_manager"] == l2]
+
+    # Sort
+    sort_fields = _SORT_KEYS.get(sort_by, _SORT_KEYS["name_asc"])
+    reverse     = sort_by == "name_desc"
+
+    def _sort_key(r: dict) -> tuple:
+        parts = []
+        for f in sort_fields:
+            v = r.get(f, "")
+            if f == "win_id":
+                parts.append(int(v) if str(v).isdigit() else 0)
+            else:
+                parts.append((v or "").lower())
+        return tuple(parts)
+
+    enriched.sort(key=_sort_key, reverse=reverse)
+    return enriched
