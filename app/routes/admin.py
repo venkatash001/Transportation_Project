@@ -16,7 +16,7 @@ from datetime import date, timedelta, datetime
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from fastapi import APIRouter, Request, Query, Form
+from fastapi import APIRouter, Request, Query, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -26,7 +26,9 @@ from db import (
     get_l1_managers, get_agents_for_manager, get_all_agents,
     upsert_override, delete_override,
     get_roster_for_range, get_overrides_for_range,
+    get_master_stats,
 )
+from master import load_excel_into_master
 from matrix import date_range, build_matrix
 
 router    = APIRouter()
@@ -48,6 +50,116 @@ _SHIFT_PRESETS = {
 
 def _require_admin(request: Request):
     return is_admin(request)
+
+
+# ---------------------------------------------------------------------------
+# Master Data Upload
+# ---------------------------------------------------------------------------
+@router.get("/admin/master", response_class=HTMLResponse)
+async def master_page(request: Request):
+    if not _require_admin(request):
+        return RedirectResponse("/login?next=/admin/master")
+    stats = get_master_stats()
+    return templates.TemplateResponse("admin/master_upload.html", {
+        "request": request,
+        "stats":   stats,
+    })
+
+
+@router.post("/admin/master/upload", response_class=HTMLResponse)
+async def master_upload(
+    request: Request,
+    files: list[UploadFile] = File(...),
+):
+    if not _require_admin(request):
+        return HTMLResponse("<p class='text-red-500'>Unauthorised</p>", status_code=403)
+
+    import tempfile, shutil
+    results = []
+    for upload in files:
+        if not upload.filename:
+            continue
+        # Save to a temp file so openpyxl can read it
+        suffix = Path(upload.filename).suffix
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            shutil.copyfileobj(upload.file, tmp)
+            tmp_path = tmp.name
+        label = Path(upload.filename).stem
+        result = load_excel_into_master(tmp_path, label)
+        result["file"] = upload.filename   # use original filename in UI
+        Path(tmp_path).unlink(missing_ok=True)
+        results.append(result)
+
+    stats = get_master_stats()
+    # Return an HTMX partial
+    rows_html = "".join(
+        f"""<tr class='border-b'>
+            <td class='py-2 px-3 font-mono text-sm'>{r['file']}</td>
+            <td class='py-2 px-3 text-center'>{r['parsed']}</td>
+            <td class='py-2 px-3 text-center text-green-700 font-bold'>{r['upserted']}</td>
+            <td class='py-2 px-3 text-center text-{'red' if r['error'] else 'gray'}-500'>
+                {' ' + r['error'] if r['error'] else ' OK'}
+            </td>
+        </tr>"""
+        for r in results
+    )
+    return HTMLResponse(f"""
+        <div class='mt-4 p-4 bg-green-50 border border-green-200 rounded-lg'>
+            <p class='font-bold text-green-800 mb-3'> Upload complete — Master DB now has
+               <span class='text-blue-700'>{stats['total']} agents</span>
+               ({stats['active']} active · {stats['lob_count']} LOBs)</p>
+            <table class='w-full text-sm border border-gray-200 rounded'>
+                <thead class='bg-gray-50'><tr>
+                    <th class='py-2 px-3 text-left'>File</th>
+                    <th class='py-2 px-3 text-center'>Parsed</th>
+                    <th class='py-2 px-3 text-center'>Saved</th>
+                    <th class='py-2 px-3 text-center'>Status</th>
+                </tr></thead>
+                <tbody>{rows_html}</tbody>
+            </table>
+            <p class='text-xs text-gray-500 mt-2'>Reload any roster tab to see updated names, teams & managers.</p>
+        </div>
+    """)
+
+
+@router.post("/admin/master/reload-defaults", response_class=HTMLResponse)
+async def master_reload_defaults(request: Request):
+    """Re-load from the OneDrive HeadCount files (local machine only)."""
+    if not _require_admin(request):
+        return HTMLResponse("<p class='text-red-500'>Unauthorised</p>", status_code=403)
+    from master import _DEFAULT_FILES, load_excel_into_master
+    results = []
+    for file_path, label in _DEFAULT_FILES:
+        result = load_excel_into_master(file_path, label)
+        results.append(result)
+    stats = get_master_stats()
+    rows_html = "".join(
+        f"""<tr class='border-b'>
+            <td class='py-2 px-3 font-mono text-sm'>{Path(r['file']).name if '\\' in r['file'] or '/' in r['file'] else r['file']}</td>
+            <td class='py-2 px-3 text-center'>{r['parsed']}</td>
+            <td class='py-2 px-3 text-center text-green-700 font-bold'>{r['upserted']}</td>
+            <td class='py-2 px-3 text-center text-{'red' if r['error'] else 'gray'}-500'>
+                {' ' + r['error'] if r['error'] else ' OK'}
+            </td>
+        </tr>"""
+        for r in results
+    )
+    return HTMLResponse(f"""
+        <div class='mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg'>
+            <p class='font-bold text-blue-800 mb-3'> Reload complete — Master DB now has
+               <span class='text-blue-700'>{stats['total']} agents</span>
+               ({stats['active']} active · {stats['lob_count']} LOBs)</p>
+            <table class='w-full text-sm border border-gray-200 rounded'>
+                <thead class='bg-gray-50'><tr>
+                    <th class='py-2 px-3 text-left'>File</th>
+                    <th class='py-2 px-3 text-center'>Parsed</th>
+                    <th class='py-2 px-3 text-center'>Saved</th>
+                    <th class='py-2 px-3 text-center'>Status</th>
+                </tr></thead>
+                <tbody>{rows_html}</tbody>
+            </table>
+        </div>
+    """)
 
 
 # ---------------------------------------------------------------------------

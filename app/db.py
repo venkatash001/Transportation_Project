@@ -21,6 +21,26 @@ def init_db() -> None:
     """Create tables and indexes if they don't exist, and run column migrations."""
     with _connect() as conn:
         conn.executescript("""
+            CREATE TABLE IF NOT EXISTS agent_master (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                login_id     TEXT NOT NULL COLLATE NOCASE,
+                win_id       TEXT DEFAULT '',
+                first_name   TEXT DEFAULT '',
+                last_name    TEXT DEFAULT '',
+                full_name    TEXT DEFAULT '',
+                role         TEXT DEFAULT '',
+                status       TEXT DEFAULT '',
+                lob          TEXT DEFAULT '',
+                location     TEXT DEFAULT '',
+                l1_manager   TEXT DEFAULT '',
+                l2_manager   TEXT DEFAULT '',
+                ops_manager  TEXT DEFAULT '',
+                source_file  TEXT DEFAULT '',
+                loaded_at    TEXT DEFAULT '',
+                UNIQUE(login_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_master_login ON agent_master(login_id COLLATE NOCASE);
+
             CREATE TABLE IF NOT EXISTS roster (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
                 vcc_id        TEXT NOT NULL,
@@ -77,6 +97,77 @@ def init_db() -> None:
             logger.info("Migration applied: added shift_type column to roster table.")
 
     logger.info("Database initialised at %s", DB_PATH)
+
+
+# -- Agent Master -----------------------------------------------------------
+def upsert_master(rows: list[dict]) -> int:
+    """Bulk upsert agent master records. Returns count written."""
+    if not rows:
+        return 0
+    sql = """
+        INSERT INTO agent_master
+            (login_id, win_id, first_name, last_name, full_name,
+             role, status, lob, location, l1_manager, l2_manager,
+             ops_manager, source_file, loaded_at)
+        VALUES
+            (:login_id, :win_id, :first_name, :last_name, :full_name,
+             :role, :status, :lob, :location, :l1_manager, :l2_manager,
+             :ops_manager, :source_file, :loaded_at)
+        ON CONFLICT(login_id) DO UPDATE SET
+            win_id      = excluded.win_id,
+            first_name  = excluded.first_name,
+            last_name   = excluded.last_name,
+            full_name   = excluded.full_name,
+            role        = excluded.role,
+            status      = excluded.status,
+            lob         = excluded.lob,
+            location    = excluded.location,
+            l1_manager  = excluded.l1_manager,
+            l2_manager  = excluded.l2_manager,
+            ops_manager = excluded.ops_manager,
+            source_file = excluded.source_file,
+            loaded_at   = excluded.loaded_at
+    """
+    with _connect() as conn:
+        conn.executemany(sql, rows)
+        conn.commit()
+    return len(rows)
+
+
+def get_master_stats() -> dict:
+    """Return row counts and source file info for agent_master."""
+    with _connect() as conn:
+        total = conn.execute("SELECT COUNT(*) FROM agent_master").fetchone()[0]
+        active = conn.execute(
+            "SELECT COUNT(*) FROM agent_master WHERE LOWER(status)='active'"
+        ).fetchone()[0]
+        lob_count = conn.execute(
+            "SELECT COUNT(DISTINCT lob) FROM agent_master WHERE lob != ''"
+        ).fetchone()[0]
+        sources = conn.execute(
+            "SELECT source_file, COUNT(*) as cnt, MAX(loaded_at) as last_loaded "
+            "FROM agent_master GROUP BY source_file ORDER BY source_file"
+        ).fetchall()
+        last_loaded = conn.execute(
+            "SELECT MAX(loaded_at) FROM agent_master"
+        ).fetchone()[0]
+    return {
+        "total": total,
+        "active": active,
+        "lob_count": lob_count,
+        "sources": [dict(r) for r in sources],
+        "last_loaded": last_loaded,
+    }
+
+
+def get_master_teams() -> list[str]:
+    """Return distinct LOBs from agent_master (clean Excel names)."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT lob FROM agent_master "
+            "WHERE lob IS NOT NULL AND lob != '' ORDER BY lob"
+        ).fetchall()
+    return [r[0] for r in rows]
 
 
 def upsert_roster(rows: list[dict]) -> int:
@@ -184,6 +275,10 @@ def get_refresh_status() -> dict:
 
 
 def get_teams() -> list[str]:
+    """Return team/LOB list. Prefers clean master LOBs when available."""
+    master = get_master_teams()
+    if master:
+        return master
     with _connect() as conn:
         rows = conn.execute(
             "SELECT DISTINCT team_name FROM roster "
@@ -195,17 +290,37 @@ def get_teams() -> list[str]:
 def get_l1_managers() -> list[str]:
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT DISTINCT l1_manager FROM roster "
-            "WHERE l1_manager IS NOT NULL AND l1_manager != '' ORDER BY l1_manager"
+            """
+            SELECT DISTINCT
+                COALESCE(NULLIF(m.l1_manager,''), NULLIF(r.l1_manager,'')) AS mgr
+            FROM roster r
+            LEFT JOIN agent_master m
+                ON LOWER(TRIM(r.login_id)) = LOWER(TRIM(m.login_id))
+            WHERE mgr IS NOT NULL AND mgr != ''
+            ORDER BY mgr
+            """
         ).fetchall()
-    return [r["l1_manager"] for r in rows]
+    return [r[0] for r in rows]
 
 
 def get_agents_for_manager(l1_manager: str) -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT DISTINCT vcc_id, win_id, login_id, full_name, team_name, role, l1_manager "
-            "FROM roster WHERE l1_manager=? ORDER BY full_name",
+            """
+            SELECT DISTINCT
+                r.vcc_id,
+                r.login_id,
+                COALESCE(NULLIF(m.win_id,''), NULLIF(r.win_id,''), '')    AS win_id,
+                COALESCE(NULLIF(m.full_name,''), r.full_name, '')          AS full_name,
+                COALESCE(NULLIF(m.lob,''), NULLIF(r.team_name,''), '')     AS team_name,
+                COALESCE(NULLIF(m.role,''), NULLIF(r.role,''), '')         AS role,
+                COALESCE(NULLIF(m.l1_manager,''), NULLIF(r.l1_manager,''), '') AS l1_manager
+            FROM roster r
+            LEFT JOIN agent_master m
+                ON LOWER(TRIM(r.login_id)) = LOWER(TRIM(m.login_id))
+            WHERE COALESCE(NULLIF(m.l1_manager,''), NULLIF(r.l1_manager,''), '') = ?
+            ORDER BY full_name
+            """,
             (l1_manager,),
         ).fetchall()
     return [dict(r) for r in rows]
@@ -214,22 +329,51 @@ def get_agents_for_manager(l1_manager: str) -> list[dict]:
 def get_all_agents() -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT DISTINCT vcc_id, win_id, login_id, full_name, team_name, role, l1_manager "
-            "FROM roster ORDER BY full_name"
+            """
+            SELECT DISTINCT
+                r.vcc_id,
+                r.login_id,
+                COALESCE(NULLIF(m.win_id,''), NULLIF(r.win_id,''), '')    AS win_id,
+                COALESCE(NULLIF(m.full_name,''), r.full_name, '')          AS full_name,
+                COALESCE(NULLIF(m.lob,''), NULLIF(r.team_name,''), '')     AS team_name,
+                COALESCE(NULLIF(m.role,''), NULLIF(r.role,''), '')         AS role,
+                COALESCE(NULLIF(m.l1_manager,''), NULLIF(r.l1_manager,''), '') AS l1_manager
+            FROM roster r
+            LEFT JOIN agent_master m
+                ON LOWER(TRIM(r.login_id)) = LOWER(TRIM(m.login_id))
+            ORDER BY full_name
+            """
         ).fetchall()
     return [dict(r) for r in rows]
 
 
 def get_roster_for_range(start_date: str, end_date: str, team: str = "") -> list[dict]:
-    sql = """
-        SELECT vcc_id, win_id, login_id, first_name, last_name, full_name,
-               team_name, role, bus_line, l1_manager, l2_manager,
-               schedule_date, start_ist, end_ist, shift_label, shift_type
-        FROM roster WHERE schedule_date BETWEEN ? AND ?
+    """Fetch roster rows enriched with agent_master data (Excel wins over BQ)."""
+    cte = """
+        WITH enriched AS (
+            SELECT
+                r.vcc_id,
+                r.login_id,
+                r.first_name,
+                r.last_name,
+                r.bus_line,
+                r.schedule_date, r.start_ist, r.end_ist, r.shift_label, r.shift_type,
+                COALESCE(NULLIF(m.win_id,''),     NULLIF(r.win_id,''),     '') AS win_id,
+                COALESCE(NULLIF(m.full_name,''),  r.full_name,            '') AS full_name,
+                COALESCE(NULLIF(m.lob,''),         NULLIF(r.team_name,''), '') AS team_name,
+                COALESCE(NULLIF(m.role,''),        NULLIF(r.role,''),      '') AS role,
+                COALESCE(NULLIF(m.l1_manager,''), NULLIF(r.l1_manager,''),'') AS l1_manager,
+                COALESCE(NULLIF(m.l2_manager,''), NULLIF(r.l2_manager,''),'') AS l2_manager
+            FROM roster r
+            LEFT JOIN agent_master m
+                ON LOWER(TRIM(r.login_id)) = LOWER(TRIM(m.login_id))
+            WHERE r.schedule_date BETWEEN ? AND ?
+        )
     """
     params: list = [start_date, end_date]
+    sql = cte + " SELECT * FROM enriched"
     if team:
-        sql += " AND team_name = ?"
+        sql += " WHERE team_name = ?"
         params.append(team)
     sql += " ORDER BY full_name, schedule_date"
     with _connect() as conn:

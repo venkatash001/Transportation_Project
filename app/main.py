@@ -19,6 +19,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from config import HOST, PORT, REFRESH_INTERVAL_HOURS, APP_DIR
 from db import init_db, get_refresh_status, get_teams
 from refresh import run_refresh
+from master import auto_load_master_if_empty
 from auth import check_credentials, set_session, clear_session, is_admin, get_role
 from routes.roster  import router as roster_router
 from routes.summary import router as summary_router
@@ -38,6 +39,11 @@ async def lifespan(app: FastAPI):
     init_db()
     status = get_refresh_status()
     logger.info("DB has %d records on startup.", status["total_records"])
+    master_result = auto_load_master_if_empty()
+    if master_result.get("skipped"):
+        logger.info("Master data: %d agents already loaded.", master_result["total"])
+    else:
+        logger.info("Master data auto-loaded: %d agents.", master_result.get("total", 0))
     scheduler.add_job(run_refresh, trigger="interval",
                       hours=REFRESH_INTERVAL_HOURS, id="gcp_refresh", replace_existing=True)
     scheduler.start()

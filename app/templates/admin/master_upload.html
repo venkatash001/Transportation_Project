@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Master Data Upload | CES IND Transport Roster</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: { walmart: { blue:'#0053e2', yellow:'#ffc220' } } } }
+    }
+  </script>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans">
+
+<!-- HEADER -->
+<header class="bg-walmart-blue shadow-lg sticky top-0 z-50">
+  <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="bg-walmart-yellow rounded px-2 py-1">
+        <span class="text-walmart-blue font-black text-lg leading-none">W</span>
+      </div>
+      <div>
+        <h1 class="text-white font-bold text-lg leading-tight">CES IND Transport Roster</h1>
+        <p class="text-blue-200 text-xs">Admin - Master Agent Data</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="/" class="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg transition-colors">Home</a>
+      <a href="/admin/overrides" class="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg transition-colors">Overrides</a>
+      <a href="/admin/adhoc" class="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg transition-colors">Ad-Hoc</a>
+      <a href="/logout" class="text-xs bg-red-500/80 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg transition-colors">Logout</a>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-5xl mx-auto px-4 py-8 space-y-8">
+
+  <!-- Page Title -->
+  <div>
+    <h2 class="text-2xl font-bold text-gray-800">Master Agent Data</h2>
+    <p class="text-gray-500 text-sm mt-1">
+      Upload HeadCount Excel files to populate WIN ID, Full Name, Team, Role and L1 Manager.
+      Excel data takes priority over BigQuery on every roster view.
+    </p>
+  </div>
+
+  <!-- Current Stats -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+    <div class="bg-white rounded-xl shadow-sm border p-4 text-center">
+      <p class="text-3xl font-black text-walmart-blue">{{ stats.total }}</p>
+      <p class="text-xs text-gray-500 mt-1">Total Agents</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border p-4 text-center">
+      <p class="text-3xl font-black text-green-600">{{ stats.active }}</p>
+      <p class="text-xs text-gray-500 mt-1">Active Status</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border p-4 text-center">
+      <p class="text-3xl font-black text-purple-600">{{ stats.lob_count }}</p>
+      <p class="text-xs text-gray-500 mt-1">Distinct LOBs</p>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border p-4 text-center">
+      <p class="text-xl font-black text-gray-600">
+        {% if stats.last_loaded %}
+          {{ stats.last_loaded[:10] }}
+        {% else %}
+          Never
+        {% endif %}
+      </p>
+      <p class="text-xs text-gray-500 mt-1">Last Loaded</p>
+    </div>
+  </div>
+
+  <!-- Source Files Table -->
+  {% if stats.sources %}
+  <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+    <div class="px-5 py-3 border-b bg-gray-50">
+      <h3 class="font-semibold text-gray-700">Currently Loaded Files</h3>
+    </div>
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-gray-600">
+        <tr>
+          <th class="py-2 px-4 text-left">Source File</th>
+          <th class="py-2 px-4 text-center">Agents</th>
+          <th class="py-2 px-4 text-center">Last Loaded</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in stats.sources %}
+        <tr class="border-t hover:bg-gray-50">
+          <td class="py-2 px-4 font-mono text-blue-700">{{ s.source_file }}</td>
+          <td class="py-2 px-4 text-center font-bold">{{ s.cnt }}</td>
+          <td class="py-2 px-4 text-center text-gray-500">{{ (s.last_loaded or '')[:19] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- Column Mapping Reference -->
+  <div class="bg-blue-50 border border-blue-200 rounded-xl p-5">
+    <h3 class="font-semibold text-blue-800 mb-3">What gets read from HeadCount_Base sheet</h3>
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
+      <div class="flex items-center gap-2">
+        <span class="font-mono bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">Col B</span>
+        <span class="text-gray-700">User ID (lookup key)</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="font-mono bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">Col C</span>
+        <span class="text-gray-700">WIN ID</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="font-mono bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">Col L</span>
+        <span class="text-gray-700">Associate Name (WD)</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="font-mono bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">Col M</span>
+        <span class="text-gray-700">Role</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="font-mono bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">Col N</span>
+        <span class="text-gray-700">Employee Status</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="font-mono bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">Col P</span>
+        <span class="text-gray-700">LOB (Team Name)</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="font-mono bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">Col AD</span>
+        <span class="text-gray-700">Location</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="font-mono bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">Col BA</span>
+        <span class="text-gray-700">Team Lead (L1 Manager)</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="font-mono bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">Col BB</span>
+        <span class="text-gray-700">Team Manager (L2)</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload Form -->
+  <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+    <div class="px-5 py-4 border-b bg-gray-50 flex items-center justify-between">
+      <h3 class="font-semibold text-gray-700">Upload New HeadCount Files</h3>
+      <span class="text-xs text-gray-400">Accepts .xlsx only - can upload multiple at once</span>
+    </div>
+    <div class="p-6">
+      <form hx-post="/admin/master/upload"
+            hx-target="#upload-result"
+            hx-swap="innerHTML"
+            hx-encoding="multipart/form-data"
+            hx-indicator="#upload-spinner">
+        <!-- Drop zone -->
+        <label class="flex flex-col items-center justify-center w-full h-40
+                       border-2 border-dashed border-blue-300 rounded-xl
+                       bg-blue-50 hover:bg-blue-100 cursor-pointer transition-colors">
+          <svg class="w-10 h-10 text-blue-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+          </svg>
+          <p class="text-sm text-blue-600 font-semibold">Click to select or drag files here</p>
+          <p class="text-xs text-gray-400 mt-1">Head_Count_MAA.xlsx, Head_Count_BLR.xlsx</p>
+          <input type="file" name="files" multiple accept=".xlsx"
+                 class="hidden" id="file-input"
+                 onchange="document.getElementById('file-names').textContent = Array.from(this.files).map(f=>f.name).join(', ') || 'No files chosen'">
+        </label>
+        <p id="file-names" class="text-xs text-gray-500 mt-2 text-center">No files chosen</p>
+
+        <div class="flex items-center gap-4 mt-4">
+          <button type="submit"
+                  class="bg-walmart-blue text-white font-bold px-6 py-2.5 rounded-lg
+                         hover:bg-blue-700 transition-colors flex items-center gap-2">
+            <svg id="upload-spinner" class="htmx-indicator animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+            </svg>
+            Upload and Load
+          </button>
+          <span class="text-xs text-gray-400">Existing records will be overwritten by the new file data.</span>
+        </div>
+      </form>
+      <div id="upload-result" class="mt-2"></div>
+    </div>
+  </div>
+
+  <!-- Quick Reload from OneDrive (local machine shortcut) -->
+  <div class="bg-amber-50 border border-amber-200 rounded-xl p-5">
+    <h3 class="font-semibold text-amber-800 mb-1">Quick Reload from OneDrive (Local Machine Only)</h3>
+    <p class="text-sm text-amber-700 mb-3">
+      Reads directly from the HeadCount folder on this machine's OneDrive.
+      Will not work when hosted on Launchpad - use the file upload above instead.
+    </p>
+    <button hx-post="/admin/master/reload-defaults"
+            hx-target="#reload-result"
+            hx-swap="innerHTML"
+            hx-confirm="This will re-read Head_Count_MAA.xlsx and Head_Count_BLR.xlsx from OneDrive and overwrite all master records. Continue?"
+            class="bg-amber-500 text-white font-bold px-5 py-2 rounded-lg hover:bg-amber-600 transition-colors text-sm">
+      Reload from OneDrive Now
+    </button>
+    <div id="reload-result" class="mt-3"></div>
+  </div>
+
+  <!-- How It Works -->
+  <div class="bg-gray-100 rounded-xl p-5 text-sm text-gray-600">
+    <h3 class="font-semibold text-gray-700 mb-2">How It Works</h3>
+    <ol class="list-decimal list-inside space-y-1">
+      <li>Upload your <strong>Head_Count_MAA.xlsx</strong> and <strong>Head_Count_BLR.xlsx</strong> files above.</li>
+      <li>The app reads the <strong>HeadCount_Base</strong> sheet from each file.</li>
+      <li>Every row with a User ID is saved to the <strong>agent_master</strong> table.</li>
+      <li>On every roster view, agent_master data <strong>takes priority</strong> over BigQuery data for:
+        WIN ID, Full Name, LOB/Team, Role, L1 Manager, L2 Manager.</li>
+      <li>The roster team filter dropdown also uses <strong>clean LOB names</strong> from the master data.</li>
+      <li>Override Editor and Ad-Hoc Roster also use enriched names and teams.</li>
+    </ol>
+  </div>
+
+</main>
+</body>
+</html>
