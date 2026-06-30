@@ -48,6 +48,9 @@
 | 8 | 2026-06-26 | WIN_NBR / L1_Manager gaps: two-pass BQ metadata strategy implemented in gcp.py. backfill_meta.py ran on 1033 agents. | 0fdf993 | Kratos |
 | 9 | 2026-06-26 | Root cause diagnosed: TRIM(INT64) SQL error + upsert overwriting good values. Fixed SQL CTE, fixed upsert CASE logic, manual_fix.py for known corrections. | 6656321 | Kratos |
 | 10 | 2026-06-26 | Next approach agreed: Excel master file upload via Admin UI to populate agent_master table. Deferred to Monday. All saved. | 85191f1+ | Kratos |
+| 11 | 2026-06-29 | Pre-flight check on restart. Server confirmed running (PID 23056). DB: 81,288 rows / 1,033 agents. BQ refresh last ran 2026-06-26. All packages OK. Excel master upload confirmed as Monday priority. | b98f23e | Kratos |
+| 12 | 2026-06-30 | **agent_master feature shipped.** HeadCount Excel (MAA + BLR) parsed and loaded as source of truth. 1,619 agents in agent_master. All roster queries LEFT JOINed to master. COALESCE: Excel wins over BQ for WIN ID, Name, LOB, Role, L1/L2 Manager. Admin UI at /admin/master. Yellow "Master Data" nav button added. | 0abbdf6 | Kratos |
+| 13 | 2026-06-30 | Session recap + memory recall. Confirmed last commit (0abbdf6) and full project state. Session log updated. | -- | Kratos |
 
 ---
 
@@ -74,6 +77,18 @@
 - [x] Ad-Hoc Roster (`/admin/adhoc`): select associates, date range, shift, week-off days, preview, export
 - [x] Manual GCP Refresh button (Admin only)
 - [x] Logout endpoint
+
+### Master Data (agent_master) — Added Session 12
+- [x] `agent_master` SQLite table (UNIQUE login_id COLLATE NOCASE)
+- [x] HeadCount Excel parser (`app/master.py`): reads `HeadCount_Base` sheet from both MAA and BLR files
+- [x] login_id stored lowercase to match BigQuery format
+- [x] float WIN IDs (e.g. `231505622.0`) cleaned to int string automatically
+- [x] Auto-load on startup if `agent_master` is empty — loads both MAA + BLR from OneDrive
+- [x] All roster queries LEFT JOIN `agent_master`; COALESCE: Excel wins over BQ
+- [x] `get_teams()` now uses clean LOB names from master (e.g. `Account Review` not `Account_Review_NST_WMT_IN`)
+- [x] Override Editor and Ad-Hoc Roster both use enriched agent data from master
+- [x] Admin UI: `/admin/master` — stats dashboard + drag-drop upload + OneDrive reload button
+- [x] **1,619 agents loaded** (MAA: 942, BLR: 679, 2 overlap)
 
 ### Data Pipeline
 - [x] BigQuery SQL with AGNT_BEST CTE (deduplicates CS_AGNT, L1_MGR-populated rows prioritised)
@@ -124,12 +139,13 @@
 |   |-- matrix.py                       Matrix + summary builder
 |   |-- refresh.py                      GCP->SQLite orchestrator
 |   |-- auth.py                         HMAC session auth
+|   |-- master.py                       HeadCount Excel parser + auto-loader (NEW - Session 12)
 |   |-- routes/
 |   |   |-- __init__.py
 |   |   |-- roster.py                   /roster/future, /roster/historical
 |   |   |-- summary.py                  /summary
 |   |   |-- export.py                   /export/csv, /export/excel, /export/pdf
-|   |   |-- admin.py                    /admin/overrides, /admin/adhoc
+|   |   |-- admin.py                    /admin/overrides, /admin/adhoc, /admin/master
 |   |-- templates/
 |   |   |-- index.html                  Main UI
 |   |   |-- login.html                  Admin login page
@@ -139,6 +155,7 @@
 |   |   |-- admin/
 |   |       |-- overrides.html          Override Editor page
 |   |       |-- adhoc.html              Ad-Hoc Roster page
+|   |       |-- master_upload.html      Master Data upload + stats page (NEW - Session 12)
 |   |-- static/
 |       |-- style.css                   Sticky columns, scrollbar, HTMX spinner
 |-- data/
@@ -151,12 +168,12 @@
 
 | # | Issue | Status | Plan |
 |---|-------|--------|------|
-| 1 | WIN_NBR / L1_Manager still blank for many agents | IN PROGRESS | Excel master file approach -- build Admin Upload UI to load an Excel with correct metadata into a new `agent_master` table. Excel data takes priority over BQ for all metadata fields. |
+| 1 | WIN_NBR / L1_Manager still blank for many agents |  DONE | Excel master file (agent_master table) is now source of truth. 1,619 agents loaded. |
 | 2 | `SCHED_ACTV_DUR_MIN_QTY` is NULL in BQ source | KNOWN | Column is NULL in the table -- using max-duration deduplication still works correctly. No action needed. |
-| 3 | Manual fixes get wiped on BQ refresh | RESOLVED | Upsert now uses CASE WHEN -- blank incoming values never overwrite existing good values. |
-| 4 | More agents with incorrect Role and Team | NEXT | Will be fixed by the Excel master file approach (Item 1). |
-| 5 | AI Launchpad hosting | PLANNED | Use launchpad sub-agent to deploy. Dockerfile needed. Cloud SQL for DB. |
-| 6 | Excel master file upload UI | NEXT | Admin UI: upload Excel -> parse -> populate `agent_master` table -> overrides BQ metadata on render. |
+| 3 | Manual fixes get wiped on BQ refresh |  RESOLVED | Upsert now uses CASE WHEN -- blank incoming values never overwrite existing good values. |
+| 4 | More agents with incorrect Role and Team |  DONE | Fixed by agent_master Excel source of truth (Session 12). |
+| 5 | AI Launchpad hosting | PLANNED | Use launchpad sub-agent to deploy. Dockerfile needed. Cloud SQL for DB. Cloud SQL = same schema, change one line in config.py. |
+| 6 | Excel master file upload UI |  DONE | Built in Session 12 — /admin/master with drag-drop upload + OneDrive auto-reload. |
 | 7 | GCP credentials (for production) | OPEN | Service account key OR gcloud ADC needed. See GCP_Auth_Setup.md. |
 
 ---
@@ -179,6 +196,27 @@
 | a0s1tiz | 234049562 | MOHAMMED SHARIEF | Verified by Venkat 2026-06-26 |
 
 *Add more here as discovered. Run `manual_fix.py` to apply.*
+
+---
+
+## HeadCount Excel Column Mapping (agent_master, 0-indexed)
+
+*Sheet: `HeadCount_Base` | Files: `Head_Count_MAA.xlsx` (942) + `Head_Count_BLR.xlsx` (679)*
+
+| Col Index | Excel Header | App Field | Notes |
+|-----------|-------------|-----------|-------|
+| [01] | User ID | `login_id` | KEY — stored lowercase |
+| [02] | WIN ID | `win_id` | float cleaned to int string (231505622.0 → "231505622") |
+| [09] | First Name | — | Combined with Last Name |
+| [10] | Last Name | — | Combined with First Name |
+| [11] | Associate Name (WD) | `full_name` | Used directly if present |
+| [12] | Role | `role` | e.g. "Fraud Analyst" |
+| [13] | Status | `status` | e.g. "Active" |
+| [15] | LOB | `lob` | Clean names e.g. "Account Review" |
+| [29] | Location | `location` | e.g. "MAA" / "BLR" |
+| [52] | Team Lead Name | `l1_manager` | |
+| [53] | Team Manager Name | `l2_manager` | |
+| [54] | Ops Manager Name | `ops_manager` | |
 
 ---
 
@@ -229,6 +267,9 @@
 | GET | `/admin/adhoc` | Admin | Ad-Hoc Roster page |
 | POST | `/admin/adhoc/preview` | Admin | Preview ad-hoc matrix |
 | GET | `/admin/adhoc/export` | Admin | Download ad-hoc roster |
+| GET | `/admin/master` | Admin | Master Data stats + upload page |
+| POST | `/admin/master` | Admin | Upload HeadCount Excel file |
+| POST | `/admin/master/reload-defaults` | Admin | Reload master data from OneDrive (MAA + BLR) |
 
 ---
 
@@ -246,8 +287,12 @@
 | 2026-06-26 | Upsert CASE WHEN for metadata fields | Protects manually-corrected values from being wiped by blank BQ data |
 | 2026-06-26 | Excel master file approach for metadata | BQ CS_AGNT has data quality issues (multiple rows per agent, NULL fields); clean Excel is source of truth |
 | 2026-06-26 | Admin UI file upload (not hardcoded path) | Works both locally AND on Launchpad (no local path dependency) |
+| 2026-06-30 | agent_master table as source of truth for all agent metadata | BQ CS_AGNT data quality too poor (NULLs, multi-row, wrong LOB names); HeadCount Excel is authoritative |
+| 2026-06-30 | COALESCE: Excel wins over BQ on all metadata fields | Ensures clean names, correct teams, and valid WIN IDs in every UI view |
+| 2026-06-30 | login_id stored lowercase in agent_master | Matches BQ format for case-insensitive JOIN |
+| 2026-06-30 | Auto-load on startup if agent_master is empty | Zero-config startup — no manual step needed after fresh install |
 
 ---
 
-*Last updated: 2026-06-26 | Session 10 end | Updated by: Kratos (code-puppy-4e37f8)*
-*Next session: Monday -- Excel master file upload UI + agent_master table*
+*Last updated: 2026-06-30 | Session 13 | Updated by: Kratos (code-puppy-c9f12d)*
+*Status: agent_master COMPLETE. 1,619 agents loaded. All metadata enriched from Excel. Next: AI Launchpad deployment.*
